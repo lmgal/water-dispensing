@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Station Management &mdash; AquaTrack{% endblock %}
+{% block nav_admin %}active{% endblock %}
+
+{% block content %}
+<div id="admin-content">
+<div class="admin-header">
+  <h1>Station Management</h1>
+  <nav class="admin-nav">
+    <a href="/admin" hx-get="/admin" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Overview</a>
+    <a href="/admin/residents" hx-get="/admin/residents" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Residents</a>
+    <a href="/admin/dispensing" hx-get="/admin/dispensing" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Dispensing Log</a>
+    <a href="/admin/stations" hx-get="/admin/stations" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab active">Stations</a>
+    <a href="/admin/logout" class="admin-tab admin-logout">Logout</a>
+  </nav>
+</div>
+
+<div class="toolbar" x-data="{ showForm: false }">
+  <button class="btn btn-primary" @click="showForm = !showForm" x-text="showForm ? 'Cancel' : '+ Add Station'"></button>
+
+  <div x-show="showForm" x-transition class="add-form-inline" style="display: none;">
+    <form hx-post="/admin/stations"
+          hx-target="#station-admin-table"
+          hx-swap="innerHTML"
+          @htmx:after-request="showForm = false"
+          class="inline-form">
+      <input type="text" name="name" required class="input" placeholder="Station Name">
+      <input type="text" name="location" class="input" placeholder="Location">
+      <button type="submit" class="btn btn-primary">Add</button>
+    </form>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Name</th>
+        <th>Location</th>
+        <th>API Key</th>
+        <th>Status</th>
+        <th>Water Level</th>
+        <th>Last Heartbeat</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="station-admin-table">
+      {% include "partials/station_table_admin.html" %}
+    </tbody>
+  </table>
+</div>
+
+{% if not stations %}
+<p class="empty-state">No stations registered. Click "Add Station" to create one.</p>
+{% endif %}
+</div>
+{% endblock %}

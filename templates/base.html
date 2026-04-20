@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Water Dispensing System{% endblock %}</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.8/dist/htmx.min.js" integrity="sha384-/TgkGk7p307TH7EXJDuUlgG3Ce1UVolAOFopFekQkkXihi5u/6OCvVKyz1W+idaz" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/htmx-ext-sse@2.2.2/sse.js"></script>
+  <script src="//unpkg.com/alpinejs" defer></script>
+</head>
+<body>
+  <nav class="navbar">
+    <div class="nav-brand">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L6 8v6a6 6 0 0012 0V8z"/></svg>
+      <span>AquaTrack</span>
+    </div>
+    <div class="nav-links">
+      <a href="/" class="nav-link {% block nav_home %}{% endblock %}">Home</a>
+      <a href="/admin" class="nav-link {% block nav_admin %}{% endblock %}">Admin</a>
+    </div>
+  </nav>
+
+  <div id="toast"></div>
+
+  <main class="container">
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">
+    <p>Team 18 &mdash; Water Dispensing System &mdash; CS 145</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard &mdash; AquaTrack{% endblock %}
+{% block nav_admin %}active{% endblock %}
+
+{% block content %}
+<div id="admin-content">
+<div class="admin-header">
+  <h1>Admin Dashboard</h1>
+  <nav class="admin-nav">
+    <a href="/admin" hx-get="/admin" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab active">Overview</a>
+    <a href="/admin/residents" hx-get="/admin/residents" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Residents</a>
+    <a href="/admin/dispensing" hx-get="/admin/dispensing" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Dispensing Log</a>
+    <a href="/admin/stations" hx-get="/admin/stations" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Stations</a>
+    <a href="/admin/logout" class="admin-tab admin-logout">Logout</a>
+  </nav>
+</div>
+
+<div class="stats-row" hx-ext="sse" sse-connect="/sse/admin">
+  <div class="stat-card" sse-swap="admin-update" hx-get="/admin" hx-select=".stats-row" hx-target="closest .stats-row" hx-swap="outerHTML" hx-trigger="sse:admin-update">
+  </div>
+</div>
+<div class="stats-row">
+  <div class="stat-card accent-blue">
+    <span class="stat-value">{{ resident_count }}</span>
+    <span class="stat-label">Active Residents</span>
+  </div>
+  <div class="stat-card accent-green">
+    <span class="stat-value">{{ online_count }} / {{ station_count }}</span>
+    <span class="stat-label">Stations Online</span>
+  </div>
+  <div class="stat-card accent-orange">
+    <span class="stat-value">{{ "%.1f"|format(today_volume / 1000) }}L</span>
+    <span class="stat-label">Dispensed Today</span>
+  </div>
+  <div class="stat-card accent-purple">
+    <span class="stat-value">{{ today_transactions }}</span>
+    <span class="stat-label">Transactions Today</span>
+  </div>
+</div>
+
+<section class="section">
+  <h2>Recent Activity</h2>
+  {% if recent_records %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Resident</th>
+          <th>Station</th>
+          <th>Volume</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent_records %}
+        <tr>
+          <td>{{ r.started_at.strftime('%H:%M') }}</td>
+          <td>{{ r.resident.full_name }}</td>
+          <td>{{ r.station.name }}</td>
+          <td>{{ "%.0f"|format(r.volume_ml) }} mL</td>
+          <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-state">No dispensing activity today.</p>
+  {% endif %}
+</section>
+</div>
+{% endblock %}

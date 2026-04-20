@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Dispensing Log &mdash; AquaTrack{% endblock %}
+{% block nav_admin %}active{% endblock %}
+
+{% block content %}
+<div id="admin-content">
+<div class="admin-header">
+  <h1>Dispensing Log</h1>
+  <nav class="admin-nav">
+    <a href="/admin" hx-get="/admin" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Overview</a>
+    <a href="/admin/residents" hx-get="/admin/residents" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Residents</a>
+    <a href="/admin/dispensing" hx-get="/admin/dispensing" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab active">Dispensing Log</a>
+    <a href="/admin/stations" hx-get="/admin/stations" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Stations</a>
+    <a href="/admin/logout" class="admin-tab admin-logout">Logout</a>
+  </nav>
+</div>
+
+<div class="toolbar">
+  <div class="filter-group">
+    <input type="text"
+           name="q"
+           placeholder="Search by resident..."
+           class="input"
+           hx-get="/admin/dispensing/filter"
+           hx-trigger="input changed delay:300ms"
+           hx-target="#dispense-tbody"
+           hx-include="[name='station_id']">
+    <select name="station_id"
+            class="input"
+            hx-get="/admin/dispensing/filter"
+            hx-trigger="change"
+            hx-target="#dispense-tbody"
+            hx-include="[name='q']">
+      <option value="0">All Stations</option>
+      {% for s in stations %}
+      <option value="{{ s.id }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>Date &amp; Time</th>
+        <th>Resident</th>
+        <th>PhilSys ID</th>
+        <th>Station</th>
+        <th>Volume</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody id="dispense-tbody">
+      {% for r in records %}
+      {% include "partials/dispense_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not records %}
+<p class="empty-state">No dispensing records yet.</p>
+{% endif %}
+</div>
+{% endblock %}

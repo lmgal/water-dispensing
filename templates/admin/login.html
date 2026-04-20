@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Admin Login &mdash; AquaTrack{% endblock %}
+
+{% block content %}
+<div class="login-wrap">
+  <div class="login-card">
+    <h2>Admin Login</h2>
+    <p class="login-sub">Sign in to manage the water dispensing system.</p>
+
+    {% if error %}
+    <div class="alert alert-warning">{{ error }}</div>
+    {% endif %}
+
+    <form method="post" action="/admin/login" class="form-stack">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" name="username" required class="input" autofocus>
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" name="password" required class="input">
+      </div>
+      <button type="submit" class="btn btn-primary btn-full">Sign In</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

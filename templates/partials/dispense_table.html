@@ -1,0 +1,6 @@
+{% for r in records %}
+{% include "partials/dispense_row.html" %}
+{% endfor %}
+{% if not records %}
+<tr><td colspan="6" class="empty-state">No records match your filters.</td></tr>
+{% endif %}

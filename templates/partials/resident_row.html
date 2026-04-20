@@ -1,0 +1,17 @@
+<tr id="resident-{{ r.id }}">
+  <td><code>{{ r.philsys_id }}</code></td>
+  <td>{{ r.full_name }}</td>
+  <td>{{ r.address or "—" }}</td>
+  <td>{{ "%.0f"|format(r.daily_limit_ml / 1000) }}L</td>
+  <td class="actions">
+    <button class="btn btn-sm btn-secondary"
+            hx-get="/admin/residents/{{ r.id }}/edit"
+            hx-target="#resident-{{ r.id }}"
+            hx-swap="outerHTML">Edit</button>
+    <button class="btn btn-sm btn-danger"
+            hx-delete="/admin/residents/{{ r.id }}"
+            hx-target="#resident-{{ r.id }}"
+            hx-swap="delete"
+            hx-confirm="Permanently delete {{ r.full_name }}? This cannot be undone.">Delete</button>
+  </td>
+</tr>

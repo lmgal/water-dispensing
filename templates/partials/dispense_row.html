@@ -1,0 +1,8 @@
+<tr>
+  <td>{{ r.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+  <td>{{ r.resident.full_name }}</td>
+  <td><code>{{ r.resident.philsys_id }}</code></td>
+  <td>{{ r.station.name }}</td>
+  <td>{{ "%.0f"|format(r.volume_ml) }} mL</td>
+  <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+</tr>

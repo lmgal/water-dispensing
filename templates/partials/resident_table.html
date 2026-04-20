@@ -1,0 +1,6 @@
+{% for r in residents %}
+{% include "partials/resident_row.html" %}
+{% endfor %}
+{% if not residents %}
+<tr><td colspan="5" class="empty-state">No residents match your search.</td></tr>
+{% endif %}

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Resident Management &mdash; AquaTrack{% endblock %}
+{% block nav_admin %}active{% endblock %}
+
+{% block content %}
+<div id="admin-content">
+<div class="admin-header">
+  <h1>Resident Management</h1>
+  <nav class="admin-nav">
+    <a href="/admin" hx-get="/admin" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Overview</a>
+    <a href="/admin/residents" hx-get="/admin/residents" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab active">Residents</a>
+    <a href="/admin/dispensing" hx-get="/admin/dispensing" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Dispensing Log</a>
+    <a href="/admin/stations" hx-get="/admin/stations" hx-target="#admin-content" hx-select="#admin-content" hx-push-url="true" hx-swap="outerHTML" class="admin-tab">Stations</a>
+    <a href="/admin/logout" class="admin-tab admin-logout">Logout</a>
+  </nav>
+</div>
+
+<div class="toolbar" x-data="{ showModal: false }">
+  <div class="search-box">
+    <input type="text"
+           name="q"
+           placeholder="Search residents..."
+           class="input"
+           hx-get="/admin/residents/search"
+           hx-trigger="input changed delay:300ms, search"
+           hx-target="#resident-tbody">
+  </div>
+  <button class="btn btn-primary" @click="showModal = true">+ Register Resident</button>
+
+  <!-- Register Modal -->
+  <div class="modal-backdrop" x-show="showModal" x-transition.opacity @click.self="showModal = false" style="display: none;">
+    <div class="modal" @click.stop>
+      <h3>Register New Resident</h3>
+      <form hx-post="/admin/residents"
+            hx-target="#resident-tbody"
+            hx-swap="afterbegin"
+            @htmx:after-request="showModal = false"
+            class="form-stack">
+        <div class="form-group">
+          <label>PhilSys ID</label>
+          <input type="text" name="philsys_id" required class="input" placeholder="PSN-2024-00001">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>First Name</label>
+            <input type="text" name="first_name" required class="input">
+          </div>
+          <div class="form-group">
+            <label>Last Name</label>
+            <input type="text" name="last_name" required class="input">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Address</label>
+          <input type="text" name="address" class="input">
+        </div>
+        <div class="form-group">
+          <label>Daily Limit (mL)</label>
+          <input type="number" name="daily_limit_ml" value="20000" class="input">
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" @click="showModal = false">Cancel</button>
+          <button type="submit" class="btn btn-primary">Register</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="table-wrap">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>PhilSys ID</th>
+        <th>Name</th>
+        <th>Address</th>
+        <th>Daily Limit</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="resident-tbody">
+      {% for r in residents %}
+      {% include "partials/resident_row.html" %}
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% if not residents %}
+<p class="empty-state">No residents registered yet. Click "Register Resident" to add one.</p>
+{% endif %}
+</div>
+{% endblock %}
