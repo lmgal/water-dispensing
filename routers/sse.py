@@ -1,10 +1,9 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Request
 from sqlalchemy.orm import Session
 from sse_starlette.sse import EventSourceResponse
 
-from config import STATION_OFFLINE_THRESHOLD_SECONDS
 from database import get_db, SessionLocal
 from events import event_manager
 from models import DispensingRecord, Station
@@ -14,11 +13,7 @@ router = APIRouter(prefix="/sse", tags=["sse"])
 
 def _render_station_card(station: Station) -> str:
     """Render a single station card as HTML for SSE push."""
-    is_offline = (
-        station.last_heartbeat is None
-        or (datetime.utcnow() - station.last_heartbeat).total_seconds() > STATION_OFFLINE_THRESHOLD_SECONDS
-    )
-    effective_online = station.is_online and not is_offline
+    effective_online = station.is_online_effective
     status_class = "online" if effective_online else "offline"
     status_text = "Online" if effective_online else "Offline"
     level = station.water_level if effective_online else 0

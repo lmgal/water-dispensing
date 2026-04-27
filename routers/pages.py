@@ -1,26 +1,19 @@
-from datetime import date, datetime, timedelta
+from datetime import date
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from config import STATION_OFFLINE_THRESHOLD_SECONDS
 from database import get_db
 from models import DispensingRecord, Resident, Station
 
 router = APIRouter(tags=["pages"])
 
 
-def _is_online(station: Station) -> bool:
-    if not station.is_online or station.last_heartbeat is None:
-        return False
-    return (datetime.utcnow() - station.last_heartbeat).total_seconds() <= STATION_OFFLINE_THRESHOLD_SECONDS
-
-
 @router.get("/")
 def index(request: Request, db: Session = Depends(get_db)):
     stations = db.query(Station).order_by(Station.name).all()
-    online_count = sum(1 for s in stations if _is_online(s))
+    online_count = sum(1 for s in stations if s.is_online_effective)
 
     today_volume = db.query(func.coalesce(func.sum(DispensingRecord.volume_ml), 0)).filter(
         func.date(DispensingRecord.started_at) == date.today()

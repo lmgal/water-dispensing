@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import Boolean, Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
+from config import STATION_OFFLINE_THRESHOLD_SECONDS
 from database import Base
 
 
@@ -40,6 +41,12 @@ class Station(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     dispensing_records = relationship("DispensingRecord", back_populates="station")
+
+    @property
+    def is_online_effective(self) -> bool:
+        if not self.is_online or self.last_heartbeat is None:
+            return False
+        return (datetime.utcnow() - self.last_heartbeat).total_seconds() <= STATION_OFFLINE_THRESHOLD_SECONDS
 
 
 class DispensingRecord(Base):

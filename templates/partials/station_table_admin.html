@@ -22,7 +22,7 @@
               x-text="copied ? 'Copied!' : 'Copy'"></button>
     </span>
   </td>
-  <td><span class="badge badge-{{ 'online' if s.is_online else 'offline' }}">{{ "Online" if s.is_online else "Offline" }}</span></td>
+  <td><span class="badge badge-{{ 'online' if s.is_online_effective else 'offline' }}">{{ "Online" if s.is_online_effective else "Offline" }}</span></td>
   <td>
     <div class="water-level-mini">
       <div class="water-level-bar {% if s.water_level > 30 %}level-good{% elif s.water_level > 10 %}level-low{% else %}level-critical{% endif %}" style="width: {{ s.water_level }}%"></div>
