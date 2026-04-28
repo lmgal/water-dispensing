@@ -1,117 +1,105 @@
-"""
-Simulated MOSIP/PhilSys ID verification.
-
-Reference: https://github.com/hrdungca2/cs145-iot-cup-sample-code
-Real MOSIP uses:
-  - Base: https://api-internal.pdec.mosip.net
-  - Auth: /idauthentication/v1 (OTP-based or demographic)
-  - KYC:  /idauthentication/v1/kyc (demographic + consent)
-  - OTP:  /idauthentication/v1/otp (generate OTP via email/phone)
-
-This module simulates the MOSIP testbed verification flow for development.
-In production, replace with actual mosip-auth-sdk calls.
-"""
-
 import asyncio
 import json
+import hashlib
 from typing import Optional
-
 from pydantic import BaseModel
 
-from config import MOSIP_SIMULATION_DELAY
+# Load real MOSIP SDK
+from dynaconf import Dynaconf
+from mosip_auth_sdk import MOSIPAuthenticator
+from mosip_auth_sdk.models import DemographicsModel, IdentityInfo
 
-# Simulated MOSIP testbed endpoint (not called, just for reference)
-MOSIP_BASE_URL = "https://api-internal.pdec.mosip.net"
-MOSIP_AUTH_ENDPOINT = f"{MOSIP_BASE_URL}/idauthentication/v1"
-
+# --- UPDATED PATH HERE ---
+config = Dynaconf(
+    settings_files=[".mosip_keys/config.toml"], 
+    load_dotenv=True,
+    environments=False
+)
+authenticator = MOSIPAuthenticator(config=config)
 
 class MOSIPVerificationResult(BaseModel):
     verified: bool
-    individual_id: Optional[str] = None  # UIN / PhilSys ID
+    individual_id: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     transaction_id: Optional[str] = None
     message: str = ""
 
+# ... (parse_philsys_qr function remains the same) ...
 
 def parse_philsys_qr(raw: str) -> Optional[dict]:
-    """
-    Extract fields from a PhilSys QR code payload.
-
-    Expected QR JSON format (as scanned by GM861S):
-    {
-        "individualId": "1234567890",   // UIN
-        "name": "JUAN DELA CRUZ",
-        "dob": "1990-05-15",
-        "gender": "M",
-        "address": "Brgy. Sample, Manila"
-    }
-
-    Also accepts simplified format:
-    {
-        "id": "PSN-2024-00001",
-        "firstName": "Juan",
-        "lastName": "Dela Cruz"
-    }
-    """
     try:
         data = json.loads(raw)
-
-        # MOSIP/PhilSys standard format (individualId + name)
+        if "uin" in data:
+            name_parts = data.get("name", "").split(None, 1)
+            return {
+                "individual_id": data["uin"],
+                "first_name": name_parts[0] if name_parts else "",
+                "last_name": name_parts[1] if len(name_parts) > 1 else "",
+                "dob": data.get("dob", ""),
+                "name": data.get("name", ""),
+            }
         if "individualId" in data:
             name_parts = data.get("name", "").split(None, 1)
             return {
                 "individual_id": data["individualId"],
                 "first_name": name_parts[0] if name_parts else "",
                 "last_name": name_parts[1] if len(name_parts) > 1 else "",
-            }
-
-        # Simplified format (id + firstName + lastName)
-        if "id" in data and "firstName" in data and "lastName" in data:
-            return {
-                "individual_id": data["id"],
-                "first_name": data["firstName"],
-                "last_name": data["lastName"],
+                "dob": data.get("dob", ""),
+                "name": data.get("name", ""),
             }
     except (json.JSONDecodeError, TypeError, KeyError):
         pass
     return None
 
+def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
+    """Real MOSIP SDK call — runs in thread pool."""
+    demographics_data = DemographicsModel(
+        dob=parsed["dob"],
+        name=[IdentityInfo(language="eng", value=parsed["name"])],
+    )
+    
+    # Note: Ensure paths inside your config.toml now also reflect 
+    # the .mosip_keys/ prefix if they are relative to the root!
+    response = authenticator.auth(
+        individual_id=parsed["individual_id"],
+        individual_id_type="UIN",
+        demographic_data=demographics_data,
+        consent=True,
+    )
+
+    if not response.text:
+        return MOSIPVerificationResult(
+            verified=False,
+            message="MOSIP server returned empty response.",
+        )
+
+    response_body = response.json()
+    auth_response = response_body.get("response", {})
+    auth_status = auth_response.get("authStatus", False)
+    transaction_id = response_body.get("transactionID", "")
+
+    return MOSIPVerificationResult(
+        verified=auth_status,
+        individual_id=parsed["individual_id"],
+        first_name=parsed["first_name"],
+        last_name=parsed["last_name"],
+        transaction_id=transaction_id,
+        message="Identity verified." if auth_status else "Verification failed.",
+    )
 
 async def verify_qr(qr_data: str) -> MOSIPVerificationResult:
-    """
-    Simulate MOSIP testbed QR verification.
-
-    In production this would:
-    1. Parse QR to extract individualId
-    2. Call MOSIP /idauthentication/v1 with demographic data
-    3. Verify RS256 signed response
-    4. Return identity confirmation
-
-    For the testbed, we simulate the network delay and
-    validate the QR format locally.
-    """
-    # Simulate MOSIP API round-trip delay
-    await asyncio.sleep(MOSIP_SIMULATION_DELAY)
-
     parsed = parse_philsys_qr(qr_data)
     if parsed is None:
         return MOSIPVerificationResult(
             verified=False,
-            message="Invalid QR code format. Expected PhilSys National ID QR.",
+            message="Invalid QR code format.",
         )
-
-    # Simulate successful MOSIP demographic auth response
-    import hashlib
-    txn_id = hashlib.sha256(
-        f"{parsed['individual_id']}:{asyncio.get_event_loop().time()}".encode()
-    ).hexdigest()[:16]
-
-    return MOSIPVerificationResult(
-        verified=True,
-        individual_id=parsed["individual_id"],
-        first_name=parsed["first_name"],
-        last_name=parsed["last_name"],
-        transaction_id=txn_id,
-        message="Identity verified via MOSIP testbed (demographic auth).",
-    )
+    try:
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, lambda: _do_mosip_auth(parsed))
+    except Exception as e:
+        return MOSIPVerificationResult(
+            verified=False,
+            message=f"MOSIP error: {str(e)}",
+        )

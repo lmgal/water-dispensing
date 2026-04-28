@@ -3,3 +3,15 @@ __pycache__/
 .venv/
 *.db
 .DS_Store
+# MOSIP Credentials and Keystores
+.env
+config.toml
+*.p12
+*.pem
+credentials-18.txt
+wireguard-config.txt
+
+# Environment folders
+env/
+venv/
+__pycache__/
