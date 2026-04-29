@@ -1,6 +1,7 @@
 import asyncio
 import json
 import hashlib
+import os
 from typing import Optional
 from pydantic import BaseModel
 
@@ -14,7 +15,9 @@ config = Dynaconf(
     settings_files=[".mosip_keys/config.toml"], 
     load_dotenv=True,
     environments=False
+
 )
+
 authenticator = MOSIPAuthenticator(config=config)
 
 class MOSIPVerificationResult(BaseModel):
@@ -53,14 +56,10 @@ def parse_philsys_qr(raw: str) -> Optional[dict]:
     return None
 
 def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
-    """Real MOSIP SDK call — runs in thread pool."""
     demographics_data = DemographicsModel(
-        dob=parsed["dob"],
-        name=[IdentityInfo(language="eng", value=parsed["name"])],
+        dob=parsed["dob"]
     )
     
-    # Note: Ensure paths inside your config.toml now also reflect 
-    # the .mosip_keys/ prefix if they are relative to the root!
     response = authenticator.auth(
         individual_id=parsed["individual_id"],
         individual_id_type="UIN",
@@ -79,13 +78,14 @@ def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
     auth_status = auth_response.get("authStatus", False)
     transaction_id = response_body.get("transactionID", "")
 
+    # We still keep the names for the UI, but we only verified the DOB
     return MOSIPVerificationResult(
         verified=auth_status,
         individual_id=parsed["individual_id"],
         first_name=parsed["first_name"],
         last_name=parsed["last_name"],
         transaction_id=transaction_id,
-        message="Identity verified." if auth_status else "Verification failed.",
+        message="✅ Verified via DOB" if auth_status else "❌ Verification failed.",
     )
 
 async def verify_qr(qr_data: str) -> MOSIPVerificationResult:
