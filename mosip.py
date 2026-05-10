@@ -1,24 +1,39 @@
 import asyncio
 import json
-import hashlib
 import os
+from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
 
-# Load real MOSIP SDK
 from dynaconf import Dynaconf
 from mosip_auth_sdk import MOSIPAuthenticator
-from mosip_auth_sdk.models import DemographicsModel, IdentityInfo
+from mosip_auth_sdk.models import DemographicsModel
 
-# --- UPDATED PATH HERE ---
-config = Dynaconf(
-    settings_files=[".mosip_keys/config.toml"], 
-    load_dotenv=True,
-    environments=False
+_CONFIG_PATH = Path(__file__).resolve().parent / ".mosip_keys" / "config.toml"
+_authenticator: Optional[MOSIPAuthenticator] = None
+_config_error: Optional[str] = None
 
-)
 
-authenticator = MOSIPAuthenticator(config=config)
+def _get_authenticator() -> Optional[MOSIPAuthenticator]:
+    global _authenticator, _config_error
+    if _authenticator is not None:
+        return _authenticator
+    if _config_error is not None:
+        return None
+    try:
+        if not _CONFIG_PATH.exists():
+            _config_error = f"MOSIP config not found at {_CONFIG_PATH}"
+            return None
+        config = Dynaconf(
+            settings_files=[str(_CONFIG_PATH)],
+            load_dotenv=True,
+            environments=False,
+        )
+        _authenticator = MOSIPAuthenticator(config=config)
+        return _authenticator
+    except Exception as e:
+        _config_error = f"MOSIP init failed: {e}"
+        return None
 
 class MOSIPVerificationResult(BaseModel):
     verified: bool
@@ -56,11 +71,21 @@ def parse_philsys_qr(raw: str) -> Optional[dict]:
     return None
 
 def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
+    auth = _get_authenticator()
+    if auth is None:
+        return MOSIPVerificationResult(
+            verified=False,
+            individual_id=parsed["individual_id"],
+            first_name=parsed["first_name"],
+            last_name=parsed["last_name"],
+            message=f"MOSIP not configured ({_config_error}).",
+        )
+
     demographics_data = DemographicsModel(
         dob=parsed["dob"]
     )
-    
-    response = authenticator.auth(
+
+    response = auth.auth(
         individual_id=parsed["individual_id"],
         individual_id_type="UIN",
         demographic_data=demographics_data,

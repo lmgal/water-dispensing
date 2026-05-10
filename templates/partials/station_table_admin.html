@@ -3,19 +3,15 @@
   <td>{{ s.id }}</td>
   <td>
     <span x-show="!editing">{{ s.name }}</span>
-    <template x-if="editing">
-      <input type="text" name="name" value="{{ s.name }}" class="input input-sm" form="edit-station-{{ s.id }}">
-    </template>
+    <input type="text" name="name" value="{{ s.name }}" class="input input-sm" form="edit-station-{{ s.id }}" x-show="editing" style="display:none">
   </td>
   <td>
     <span x-show="!editing">{{ s.location or "—" }}</span>
-    <template x-if="editing">
-      <input type="text" name="location" value="{{ s.location or '' }}" class="input input-sm" form="edit-station-{{ s.id }}">
-    </template>
+    <input type="text" name="location" value="{{ s.location or '' }}" class="input input-sm" form="edit-station-{{ s.id }}" x-show="editing" style="display:none">
   </td>
   <td x-data="{ copied: false }">
     <span x-show="!showKey" class="api-key-hidden" @click="showKey = true" title="Click to reveal">••••••••</span>
-    <span x-show="showKey" class="api-key-wrap">
+    <span x-show="showKey" class="api-key-wrap" style="display:none">
       <code class="api-key" @click="showKey = false" title="Click to hide">{{ s.api_key }}</code>
       <button class="btn btn-sm btn-secondary btn-copy"
               @click="navigator.clipboard.writeText('{{ s.api_key }}'); copied = true; setTimeout(() => copied = false, 1500)"
@@ -31,27 +27,23 @@
   </td>
   <td>{{ s.last_heartbeat.strftime('%H:%M:%S') if s.last_heartbeat else "Never" }}</td>
   <td class="actions">
-    <template x-if="!editing">
-      <div>
-        <button class="btn btn-sm btn-secondary" @click="editing = true">Edit</button>
-        <button class="btn btn-sm btn-danger"
-                hx-delete="/admin/stations/{{ s.id }}"
-                hx-target="#station-admin-table"
-                hx-swap="innerHTML"
-                hx-confirm="Delete station {{ s.name }}?">Delete</button>
-      </div>
-    </template>
-    <template x-if="editing">
-      <div>
-        <form id="edit-station-{{ s.id }}"
-              hx-put="/admin/stations/{{ s.id }}"
+    <form id="edit-station-{{ s.id }}"
+          hx-put="/admin/stations/{{ s.id }}"
+          hx-target="#station-admin-table"
+          hx-swap="innerHTML"
+          style="display:none"></form>
+    <div x-show="!editing">
+      <button class="btn btn-sm btn-secondary" @click="editing = true">Edit</button>
+      <button class="btn btn-sm btn-danger"
+              hx-delete="/admin/stations/{{ s.id }}"
               hx-target="#station-admin-table"
-              hx-swap="innerHTML">
-        </form>
-        <button type="submit" form="edit-station-{{ s.id }}" class="btn btn-sm btn-primary">Save</button>
-        <button class="btn btn-sm btn-secondary" @click="editing = false">Cancel</button>
-      </div>
-    </template>
+              hx-swap="innerHTML"
+              hx-confirm="Delete station {{ s.name }}?">Delete</button>
+    </div>
+    <div x-show="editing" style="display:none">
+      <button type="submit" form="edit-station-{{ s.id }}" class="btn btn-sm btn-primary">Save</button>
+      <button class="btn btn-sm btn-secondary" @click="editing = false">Cancel</button>
+    </div>
   </td>
 </tr>
 {% endfor %}

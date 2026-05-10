@@ -15,11 +15,14 @@
   </nav>
 </div>
 
-<div class="stats-row" hx-ext="sse" sse-connect="/sse/admin">
-  <div class="stat-card" sse-swap="admin-update" hx-get="/admin" hx-select=".stats-row" hx-target="closest .stats-row" hx-swap="outerHTML" hx-trigger="sse:admin-update">
-  </div>
-</div>
-<div class="stats-row">
+<div class="stats-row"
+     hx-ext="sse"
+     sse-connect="/sse/admin"
+     hx-get="/admin"
+     hx-select=".stats-row"
+     hx-target="this"
+     hx-swap="outerHTML"
+     hx-trigger="sse:admin-update">
   <div class="stat-card accent-blue">
     <span class="stat-value">{{ resident_count }}</span>
     <span class="stat-label">Active Residents</span>

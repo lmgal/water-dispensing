@@ -258,11 +258,16 @@ async def create_station(
 ):
     existing = db.query(Station).filter(Station.name == name).first()
     if existing:
-        return HTMLResponse(
+        stations = db.query(Station).order_by(Station.name).all()
+        response = _tpl(request, "partials/station_table_admin.html", {"stations": stations})
+        response.headers["HX-Reswap"] = "innerHTML"
+        body = response.body.decode()
+        body += (
             '<div id="toast" hx-swap-oob="innerHTML:#toast">'
             '<div class="toast error" x-data x-init="setTimeout(() => $el.remove(), 3000)">Station name already exists.</div>'
-            '</div>',
+            '</div>'
         )
+        return HTMLResponse(body)
 
     station = Station(name=name, location=location)
     db.add(station)
