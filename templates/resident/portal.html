@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}My Account &mdash; AquaTrack{% endblock %}
+
+{% block content %}
+<div class="resident-portal">
+  <div class="portal-header">
+    <div>
+      <h1>{{ resident.full_name }}</h1>
+      <p class="hero-sub"><code>{{ resident.philsys_id }}</code> &middot; {{ resident.address or "No address on file" }}</p>
+    </div>
+    <a href="/resident/logout" class="btn btn-secondary">Sign out</a>
+  </div>
+
+  <section class="section">
+    <h2>Quota for {{ month_label }}</h2>
+    <div class="stats-row">
+      <div class="stat-card accent-blue">
+        <span class="stat-value">{{ "%.1f"|format(month_remaining_ml / 1000) }}L</span>
+        <span class="stat-label">Remaining this month</span>
+      </div>
+      <div class="stat-card accent-green">
+        <span class="stat-value">{{ "%.1f"|format(month_used_ml / 1000) }}L</span>
+        <span class="stat-label">Used this month</span>
+      </div>
+      <div class="stat-card accent-orange">
+        <span class="stat-value">{{ "%.0f"|format(monthly_quota_ml / 1000) }}L</span>
+        <span class="stat-label">Monthly allocation</span>
+      </div>
+      <div class="stat-card accent-purple">
+        <span class="stat-value">{{ "%.1f"|format(today_remaining_ml / 1000) }}L</span>
+        <span class="stat-label">Remaining today</span>
+      </div>
+    </div>
+    <div class="water-level" style="margin-top: 1rem;">
+      <div class="water-level-bar {% if pct_used < 70 %}level-good{% elif pct_used < 90 %}level-low{% else %}level-critical{% endif %}" style="width: {{ '%.1f'|format(pct_used) }}%"></div>
+      <span class="water-level-text">{{ "%.0f"|format(pct_used) }}% used</span>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Dispensing log &mdash; {{ month_label }}</h2>
+    {% if records %}
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Date &amp; time</th>
+            <th>Station</th>
+            <th>Volume</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in records %}
+          <tr>
+            <td>{{ r.started_at.strftime('%Y-%m-%d %H:%M') }}</td>
+            <td>{{ r.station.name }}</td>
+            <td>{{ "%.0f"|format(r.volume_ml) }} mL</td>
+            <td><span class="badge badge-{{ r.status }}">{{ r.status }}</span></td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="empty-state">No dispensing activity yet this month.</p>
+    {% endif %}
+  </section>
+</div>
+{% endblock %}

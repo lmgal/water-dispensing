@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, date
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -9,6 +10,8 @@ from events import event_manager
 from models import DispensingRecord, Resident, Station
 from mosip import verify_qr
 from schemas import AuthRequest, AuthResponse, DispenseRequest, DispenseResponse, HeartbeatRequest
+
+logger = logging.getLogger("api_station")
 
 router = APIRouter(prefix="/api", tags=["hardware"])
 
@@ -43,6 +46,10 @@ async def auth_scan(req: AuthRequest, station: Station = Depends(require_station
     # Verify QR via simulated MOSIP
     mosip_result = await verify_qr(req.qr_data)
     if not mosip_result.verified:
+        logger.warning(
+            "auth_denied station=%s reason=mosip_unverified uin=%s msg=%r",
+            station.id, mosip_result.individual_id or "?", mosip_result.message,
+        )
         return AuthResponse(authorized=False, reason=mosip_result.message)
 
     # Look up resident by MOSIP individual ID (= PhilSys ID)
@@ -50,16 +57,33 @@ async def auth_scan(req: AuthRequest, station: Station = Depends(require_station
         Resident.philsys_id == mosip_result.individual_id
     ).first()
     if not resident:
+        logger.warning(
+            "auth_denied station=%s reason=not_registered uin=%s",
+            station.id, mosip_result.individual_id,
+        )
         return AuthResponse(authorized=False, reason="Resident not registered in system.")
 
     if not resident.is_active:
+        logger.warning(
+            "auth_denied station=%s reason=inactive resident=%s",
+            station.id, resident.id,
+        )
         return AuthResponse(authorized=False, reason="Resident account is deactivated.")
 
     # Check daily limit
     used_today = _get_today_usage(db, resident.id)
     remaining = max(0, resident.daily_limit_ml - used_today)
     if remaining <= 0:
+        logger.warning(
+            "auth_denied station=%s reason=quota_exhausted resident=%s used=%.0f limit=%.0f",
+            station.id, resident.id, used_today, resident.daily_limit_ml,
+        )
         return AuthResponse(authorized=False, reason="Daily water allocation exhausted.")
+
+    logger.info(
+        "auth_ok station=%s resident=%s remaining_ml=%.0f",
+        station.id, resident.id, remaining,
+    )
 
     # Publish auth event for SSE
     await event_manager.publish("dispense", f"auth:{resident.id}:{station.id}")

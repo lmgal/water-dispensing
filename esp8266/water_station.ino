@@ -1,363 +1,358 @@
-/*
- * Water Dispensing Station — ESP8266 Firmware
- * Team 18 — CS 145
- *
- * Hardware:
- *   - ESP8266 (NodeMCU / D1 Mini)
- *   - GM861S QR Code Scanner (UART)
- *   - Push Button (GPIO)
- *   - Relay Module (GPIO) → Water Pump
- *   - Flow Sensor (GPIO interrupt)
- *   - LED (GPIO) — Green/Red status
- *   - Buzzer (GPIO)
- */
-
 #include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
 #include <SoftwareSerial.h>
 #include <ArduinoJson.h>
 
-// === WiFi Configuration ===
-const char* WIFI_SSID     = "YOUR_WIFI_SSID";
-const char* WIFI_PASSWORD = "YOUR_WIFI_PASSWORD";
+#define QR_RX_PIN   D2
+#define QR_TX_PIN   D6
+#define BUTTON_PIN  D1
+#define BUZZER_PIN  D5
+#define LED_PIN     D7
+#define PUMP_PIN    D3
 
-// === Server Configuration ===
-const char* SERVER_URL = "http://YOUR_SERVER_IP:8000";
-const int   STATION_ID = 1;
+const char* AP_SSID      = "Station-1-Setup";
+const int   STATION_ID   = 1;
+const char* API_KEY      = "5aac441c277094868c0d2d02c610b2e6ba3b11cf70074a22ce63a4cf3b03695a";
+const char* SERVER_URL   = "http://178.128.99.170:8000";
+const float FLOW_RATE_ML_S    = 20.0f;
+const unsigned long HEARTBEAT_INTERVAL_MS = 30000;
+const unsigned long AUTH_TIMEOUT_MS       = 30000;
+const unsigned long INVALID_BEEP_MS       = 1000;
+const unsigned long DEPLETED_BEEP_MS      = 1000;
+const unsigned long BUTTON_DEBOUNCE_MS    = 30;
+const unsigned long SCAN_GAP_MS           = 300;
 
-// === Pin Definitions ===
-#define QR_RX_PIN      D5   // GM861S TX → ESP RX
-#define QR_TX_PIN      D6   // GM861S RX → ESP TX
-#define BUTTON_PIN     D2   // Push button (active LOW with pullup)
-#define RELAY_PIN      D1   // Relay module (active HIGH)
-#define FLOW_PIN       D7   // Flow sensor (pulse input)
-#define LED_GREEN_PIN  D3   // Green LED
-#define LED_RED_PIN    D4   // Red LED
-#define BUZZER_PIN     D8   // Buzzer
+enum State { PROVISIONING, IDLE, AUTHORIZED, DISPENSING };
+State state = PROVISIONING;
 
-// === Flow Sensor Calibration ===
-// Pulses per liter (adjust for your sensor)
-const float PULSES_PER_ML = 0.45;
-
-// === State Machine ===
-enum State {
-  STATE_IDLE,
-  STATE_SCANNING,
-  STATE_VERIFYING,
-  STATE_AUTHORIZED,
-  STATE_DISPENSING,
-  STATE_ERROR
-};
-
-State currentState = STATE_IDLE;
-
-// === Global Variables ===
-SoftwareSerial qrSerial(QR_RX_PIN, QR_TX_PIN);
+SoftwareSerial scanner(QR_RX_PIN, QR_TX_PIN);
+ESP8266WebServer server(80);
 WiFiClient wifiClient;
 
-volatile unsigned long flowPulseCount = 0;
-float totalVolumeML = 0;
-float remainingML = 0;
-int authorizedResidentId = -1;
+bool wifiReady = false;
+bool tryConnect = false;
+String pendingSSID, pendingPW;
 
-unsigned long lastHeartbeat = 0;
-unsigned long lastButtonCheck = 0;
-unsigned long dispensingStartTime = 0;
+int   residentId = -1;
+float remainingMl = 0;
+unsigned long authStartMs = 0;
+unsigned long pumpStartMs = 0;
+unsigned long beepUntilMs = 0;
 
-const unsigned long HEARTBEAT_INTERVAL = 30000;  // 30 seconds
-const unsigned long BUTTON_DEBOUNCE = 200;        // 200ms
+int  lastBtnReading = HIGH;
+int  btnState = HIGH;
+unsigned long lastBtnChange = 0;
 
-String qrBuffer = "";
+unsigned long lastHeartbeatMs = 0;
+unsigned long lastAliveMs = 0;
+const unsigned long ALIVE_INTERVAL_MS = 5000;
 
-// === Flow Sensor ISR ===
-IRAM_ATTR void flowPulseISR() {
-  flowPulseCount++;
+const char* stateName(State s) {
+  switch (s) {
+    case PROVISIONING: return "PROVISIONING";
+    case IDLE:         return "IDLE";
+    case AUTHORIZED:   return "AUTHORIZED";
+    case DISPENSING:   return "DISPENSING";
+  }
+  return "?";
 }
 
-// === Setup ===
-void setup() {
-  Serial.begin(115200);
-  qrSerial.begin(9600);
+void setState(State s) {
+  if (state != s) {
+    Serial.printf("[state] %s -> %s\n", stateName(state), stateName(s));
+    state = s;
+  }
+}
 
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
-  pinMode(RELAY_PIN, OUTPUT);
-  pinMode(FLOW_PIN, INPUT_PULLUP);
-  pinMode(LED_GREEN_PIN, OUTPUT);
-  pinMode(LED_RED_PIN, OUTPUT);
-  pinMode(BUZZER_PIN, OUTPUT);
+const char INDEX_HTML[] PROGMEM = R"=====(
+<!DOCTYPE html>
+<html><head><title>Station 1 Setup</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:system-ui;max-width:400px;margin:2em auto;padding:1em}
+label{display:block;margin-top:10px}
+input{width:100%;padding:8px;box-sizing:border-box}
+button{margin-top:14px;padding:10px 20px;background:#0a7;color:#fff;border:0;border-radius:4px;cursor:pointer}</style>
+</head><body>
+<h2>WiFi Setup</h2>
+<form method="POST" action="/save">
+<label>SSID<input name="ssid" required></label>
+<label>Password<input name="pw" type="password"></label>
+<button type="submit">Connect</button>
+</form>
+</body></html>
+)=====";
 
-  digitalWrite(RELAY_PIN, LOW);
-  digitalWrite(LED_GREEN_PIN, LOW);
-  digitalWrite(LED_RED_PIN, LOW);
-  digitalWrite(BUZZER_PIN, LOW);
+void handleRoot() {
+  server.send_P(200, "text/html", INDEX_HTML);
+}
 
-  attachInterrupt(digitalPinToInterrupt(FLOW_PIN), flowPulseISR, RISING);
+void handleSave() {
+  if (!server.hasArg("ssid")) {
+    server.send(400, "text/plain", "Missing ssid");
+    return;
+  }
+  pendingSSID = server.arg("ssid");
+  pendingPW = server.arg("pw");
+  String body = "<html><body><h2>Connecting to " + pendingSSID +
+                "...</h2><p>If this succeeds, the AP will shut down.</p></body></html>";
+  server.send(200, "text/html", body);
+  tryConnect = true;
+}
 
-  // Connect to WiFi
-  Serial.printf("Connecting to %s", WIFI_SSID);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+bool connectSTA(const String& ssid, const String& pw) {
+  Serial.printf("Connecting to '%s'...\n", ssid.c_str());
+  WiFi.begin(ssid.c_str(), pw.c_str());
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) {
+    delay(250);
     Serial.print(".");
   }
-  Serial.printf("\nConnected! IP: %s\n", WiFi.localIP().toString().c_str());
-
-  indicateReady();
+  Serial.println();
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.print("Connected, IP=");
+    Serial.println(WiFi.localIP());
+    return true;
+  }
+  Serial.println("Connection failed");
+  WiFi.disconnect();
+  return false;
 }
 
-// === Main Loop ===
-void loop() {
-  // Heartbeat
-  if (millis() - lastHeartbeat >= HEARTBEAT_INTERVAL) {
-    sendHeartbeat();
-    lastHeartbeat = millis();
-  }
+void provisionWiFi() {
+  WiFi.mode(WIFI_AP);
+  WiFi.setOutputPower(20.5);
+  WiFi.softAP(AP_SSID);
+  Serial.print("AP '");
+  Serial.print(AP_SSID);
+  Serial.print("' started, IP=");
+  Serial.println(WiFi.softAPIP());
 
-  switch (currentState) {
-    case STATE_IDLE:
-      readQRScanner();
-      break;
+  server.on("/", HTTP_GET, handleRoot);
+  server.on("/save", HTTP_POST, handleSave);
+  server.begin();
 
-    case STATE_AUTHORIZED:
-      checkButton();
-      // Timeout after 30s of no button press
-      if (millis() - dispensingStartTime > 30000) {
-        Serial.println("Authorization timeout.");
-        resetToIdle();
+  while (!wifiReady) {
+    server.handleClient();
+    if (tryConnect) {
+      tryConnect = false;
+      delay(500);
+      WiFi.mode(WIFI_AP_STA);
+      WiFi.setOutputPower(20.5);
+      if (connectSTA(pendingSSID, pendingPW)) {
+        server.stop();
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
+        WiFi.setOutputPower(20.5);
+        wifiReady = true;
+      } else {
+        WiFi.mode(WIFI_AP);
+        WiFi.setOutputPower(20.5);
+        WiFi.softAP(AP_SSID);
       }
-      break;
-
-    case STATE_DISPENSING:
-      updateDispensing();
-      checkButton();
-      break;
-
-    default:
-      break;
-  }
-}
-
-// === QR Scanner ===
-void readQRScanner() {
-  while (qrSerial.available()) {
-    char c = qrSerial.read();
-    if (c == '\n' || c == '\r') {
-      if (qrBuffer.length() > 0) {
-        Serial.printf("QR Scanned: %s\n", qrBuffer.c_str());
-        verifyQR(qrBuffer);
-        qrBuffer = "";
-      }
-    } else {
-      qrBuffer += c;
     }
+    delay(10);
   }
 }
 
-// === Verify QR via Server ===
-void verifyQR(String qrData) {
-  currentState = STATE_VERIFYING;
-  indicateProcessing();
-
+int postJson(const String& path, const String& body, String& response) {
+  if (WiFi.status() != WL_CONNECTED) return -1;
   HTTPClient http;
-  String url = String(SERVER_URL) + "/api/auth";
-  http.begin(wifiClient, url);
+  wifiClient.setTimeout(1500);
+  http.setTimeout(2500);
+  http.setReuse(false);
+  http.begin(wifiClient, SERVER_URL + path);
   http.addHeader("Content-Type", "application/json");
-
-  JsonDocument doc;
-  doc["station_id"] = STATION_ID;
-  doc["qr_data"] = qrData;
-
-  String body;
-  serializeJson(doc, body);
-
-  int httpCode = http.POST(body);
-
-  if (httpCode == 200) {
-    String response = http.getString();
-    JsonDocument resDoc;
-    deserializeJson(resDoc, response);
-
-    bool authorized = resDoc["authorized"];
-    if (authorized) {
-      authorizedResidentId = resDoc["resident_id"];
-      remainingML = resDoc["remaining_ml"];
-      Serial.printf("Authorized! Resident %d, remaining %.0f mL\n", authorizedResidentId, remainingML);
-      currentState = STATE_AUTHORIZED;
-      dispensingStartTime = millis();
-      indicateAuthorized();
-    } else {
-      const char* reason = resDoc["reason"];
-      Serial.printf("Denied: %s\n", reason);
-      indicateDenied();
-      resetToIdle();
-    }
-  } else {
-    Serial.printf("HTTP Error: %d\n", httpCode);
-    indicateError();
-    resetToIdle();
-  }
-
+  http.addHeader("X-API-Key", API_KEY);
+  int code = http.POST(body);
+  if (code > 0) response = http.getString();
   http.end();
+  return code;
 }
 
-// === Button Handling ===
-void checkButton() {
-  if (millis() - lastButtonCheck < BUTTON_DEBOUNCE) return;
-  lastButtonCheck = millis();
-
-  bool pressed = (digitalRead(BUTTON_PIN) == LOW);
-
-  if (currentState == STATE_AUTHORIZED && pressed) {
-    startDispensing();
-  } else if (currentState == STATE_DISPENSING && !pressed) {
-    stopDispensing();
-  }
-}
-
-// === Dispensing Control ===
-void startDispensing() {
-  Serial.println("Starting dispensing...");
-  currentState = STATE_DISPENSING;
-  flowPulseCount = 0;
-  totalVolumeML = 0;
-  dispensingStartTime = millis();
-
-  digitalWrite(RELAY_PIN, HIGH);  // Turn on pump
-  indicateDispensing();
-}
-
-void updateDispensing() {
-  // Calculate volume from flow sensor pulses
-  noInterrupts();
-  unsigned long pulses = flowPulseCount;
-  interrupts();
-
-  totalVolumeML = pulses / PULSES_PER_ML;
-
-  // Check if we've reached the limit
-  if (totalVolumeML >= remainingML) {
-    Serial.println("Allocation limit reached.");
-    stopDispensing();
-  }
-}
-
-void stopDispensing() {
-  Serial.printf("Stopping. Dispensed: %.0f mL\n", totalVolumeML);
-  digitalWrite(RELAY_PIN, LOW);  // Turn off pump
-
-  // Report to server
-  reportDispense(totalVolumeML);
-
-  resetToIdle();
-}
-
-// === Report Dispense to Server ===
-void reportDispense(float volumeML) {
-  HTTPClient http;
-  String url = String(SERVER_URL) + "/api/dispense";
-  http.begin(wifiClient, url);
-  http.addHeader("Content-Type", "application/json");
-
-  JsonDocument doc;
-  doc["station_id"] = STATION_ID;
-  doc["resident_id"] = authorizedResidentId;
-  doc["volume_ml"] = volumeML;
-
-  String body;
-  serializeJson(doc, body);
-
-  int httpCode = http.POST(body);
-
-  if (httpCode == 200) {
-    String response = http.getString();
-    JsonDocument resDoc;
-    deserializeJson(resDoc, response);
-    float newRemaining = resDoc["remaining_ml"];
-    Serial.printf("Recorded. Remaining today: %.0f mL\n", newRemaining);
-  } else {
-    Serial.printf("Report failed: %d\n", httpCode);
-  }
-
-  http.end();
-}
-
-// === Heartbeat ===
 void sendHeartbeat() {
-  if (WiFi.status() != WL_CONNECTED) return;
-
-  HTTPClient http;
-  String url = String(SERVER_URL) + "/api/station/heartbeat";
-  http.begin(wifiClient, url);
-  http.addHeader("Content-Type", "application/json");
-
   JsonDocument doc;
   doc["station_id"] = STATION_ID;
-  doc["water_level"] = 75;  // TODO: read from actual sensor
-
+  doc["water_level"] = 100;
   String body;
   serializeJson(doc, body);
-
-  int httpCode = http.POST(body);
-  http.end();
-
-  if (httpCode == 200) {
-    Serial.println("Heartbeat sent.");
-  }
+  String response;
+  int code = postJson("/api/station/heartbeat", body, response);
+  Serial.printf("heartbeat -> %d\n", code);
 }
 
-// === Indicator Functions ===
-void indicateReady() {
-  digitalWrite(LED_GREEN_PIN, HIGH);
-  digitalWrite(LED_RED_PIN, LOW);
-  digitalWrite(BUZZER_PIN, LOW);
+void reportDispense(float volumeMl) {
+  JsonDocument doc;
+  doc["station_id"] = STATION_ID;
+  doc["resident_id"] = residentId;
+  doc["volume_ml"] = volumeMl;
+  String body;
+  serializeJson(doc, body);
+  String response;
+  int code = postJson("/api/dispense", body, response);
+  Serial.printf("dispense %.1f mL -> %d\n", volumeMl, code);
+  if (code == 200) Serial.println(response);
 }
 
-void indicateProcessing() {
-  digitalWrite(LED_GREEN_PIN, HIGH);
-  digitalWrite(LED_RED_PIN, HIGH);
-}
-
-void indicateAuthorized() {
-  digitalWrite(LED_GREEN_PIN, HIGH);
-  digitalWrite(LED_RED_PIN, LOW);
-  // Short beep
+void startBeep(unsigned long ms) {
   digitalWrite(BUZZER_PIN, HIGH);
-  delay(100);
-  digitalWrite(BUZZER_PIN, LOW);
+  beepUntilMs = millis() + ms;
 }
 
-void indicateDenied() {
-  digitalWrite(LED_GREEN_PIN, LOW);
-  digitalWrite(LED_RED_PIN, HIGH);
-  // Three short beeps
-  for (int i = 0; i < 3; i++) {
-    digitalWrite(BUZZER_PIN, HIGH);
-    delay(150);
+void stopBeepIfDue() {
+  if (beepUntilMs && (long)(millis() - beepUntilMs) >= 0) {
     digitalWrite(BUZZER_PIN, LOW);
-    delay(100);
+    beepUntilMs = 0;
   }
-}
-
-void indicateDispensing() {
-  digitalWrite(LED_GREEN_PIN, HIGH);
-  digitalWrite(LED_RED_PIN, LOW);
-}
-
-void indicateError() {
-  digitalWrite(LED_GREEN_PIN, LOW);
-  digitalWrite(LED_RED_PIN, HIGH);
-  // Long beep
-  digitalWrite(BUZZER_PIN, HIGH);
-  delay(500);
-  digitalWrite(BUZZER_PIN, LOW);
 }
 
 void resetToIdle() {
-  currentState = STATE_IDLE;
-  authorizedResidentId = -1;
-  remainingML = 0;
-  totalVolumeML = 0;
-  flowPulseCount = 0;
-  indicateReady();
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(PUMP_PIN, LOW);
+  residentId = -1;
+  remainingMl = 0;
+  setState(IDLE);
+}
+
+String readScan() {
+  if (!scanner.available()) return "";
+  String data = "";
+  unsigned long lastByte = millis();
+  while (millis() - lastByte < SCAN_GAP_MS) {
+    if (scanner.available()) {
+      char c = scanner.read();
+      if (c >= 0x20 && c <= 0x7E) data += c;
+      lastByte = millis();
+    }
+  }
+  return data;
+}
+
+void handleScan(const String& qr) {
+  Serial.printf("Scanned: %s\n", qr.c_str());
+  JsonDocument doc;
+  doc["station_id"] = STATION_ID;
+  doc["qr_data"] = qr;
+  String body;
+  serializeJson(doc, body);
+  String response;
+  int code = postJson("/api/auth", body, response);
+  Serial.printf("auth -> %d\n", code);
+  if (code != 200) {
+    startBeep(INVALID_BEEP_MS);
+    return;
+  }
+  JsonDocument resDoc;
+  DeserializationError err = deserializeJson(resDoc, response);
+  if (err) {
+    Serial.printf("json parse: %s\n", err.c_str());
+    startBeep(INVALID_BEEP_MS);
+    return;
+  }
+  bool authorized = resDoc["authorized"];
+  if (!authorized) {
+    const char* reason = resDoc["reason"] | "denied";
+    Serial.printf("Denied: %s\n", reason);
+    startBeep(INVALID_BEEP_MS);
+    return;
+  }
+  residentId = resDoc["resident_id"];
+  remainingMl = resDoc["remaining_ml"];
+  Serial.printf("Authorized resident=%d remaining=%.0f mL\n", residentId, remainingMl);
+  digitalWrite(LED_PIN, HIGH);
+  authStartMs = millis();
+  setState(AUTHORIZED);
+}
+
+void pollButton() {
+  int reading = digitalRead(BUTTON_PIN);
+  if (reading != lastBtnReading) {
+    lastBtnChange = millis();
+    lastBtnReading = reading;
+  }
+  if (millis() - lastBtnChange > BUTTON_DEBOUNCE_MS && reading != btnState) {
+    btnState = reading;
+    Serial.printf("[btn] %s\n", btnState == LOW ? "press" : "release");
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("\n--- water_station ---");
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_PIN, OUTPUT);
+  pinMode(PUMP_PIN, OUTPUT);
+  digitalWrite(BUZZER_PIN, LOW);
+  digitalWrite(LED_PIN, LOW);
+  digitalWrite(PUMP_PIN, LOW);
+
+  scanner.begin(9600);
+
+  provisionWiFi();
+  setState(IDLE);
+  Serial.println("Ready.");
+}
+
+void loop() {
+  stopBeepIfDue();
+  pollButton();
+
+  if (millis() - lastAliveMs >= ALIVE_INTERVAL_MS) {
+    Serial.printf("[alive] state=%s wifi=%d rssi=%d heap=%u\n",
+                  stateName(state), WiFi.status(), WiFi.RSSI(), ESP.getFreeHeap());
+    lastAliveMs = millis();
+  }
+
+  if (millis() - lastHeartbeatMs >= HEARTBEAT_INTERVAL_MS) {
+    sendHeartbeat();
+    lastHeartbeatMs = millis();
+  }
+
+  switch (state) {
+    case IDLE: {
+      String qr = readScan();
+      if (qr.length() > 0) handleScan(qr);
+      break;
+    }
+    case AUTHORIZED: {
+      if (btnState == LOW) {
+        Serial.println("[pump] start");
+        digitalWrite(PUMP_PIN, HIGH);
+        pumpStartMs = millis();
+        setState(DISPENSING);
+      } else if (millis() - authStartMs > AUTH_TIMEOUT_MS) {
+        Serial.println("[auth] timeout");
+        resetToIdle();
+      }
+      break;
+    }
+    case DISPENSING: {
+      float dispensedMl = (millis() - pumpStartMs) / 1000.0f * FLOW_RATE_ML_S;
+      if (dispensedMl >= remainingMl) {
+        Serial.printf("[pump] quota depleted at %.1f mL\n", dispensedMl);
+        digitalWrite(PUMP_PIN, LOW);
+        digitalWrite(LED_PIN, LOW);
+        startBeep(DEPLETED_BEEP_MS);
+        reportDispense(remainingMl);
+        residentId = -1;
+        remainingMl = 0;
+        setState(IDLE);
+      } else if (btnState == HIGH) {
+        Serial.printf("[pump] stop @ %.1f mL\n", dispensedMl);
+        digitalWrite(PUMP_PIN, LOW);
+        digitalWrite(LED_PIN, LOW);
+        reportDispense(dispensedMl);
+        residentId = -1;
+        remainingMl = 0;
+        setState(IDLE);
+      }
+      break;
+    }
+    default:
+      break;
+  }
 }

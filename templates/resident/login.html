@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Resident Login &mdash; AquaTrack{% endblock %}
+
+{% block content %}
+<div class="resident-login">
+  <h1>Resident Login</h1>
+  <p class="hero-sub">Scan your PhilSys QR code with your camera to sign in.</p>
+
+  {% if error %}
+  <div class="toast error" style="margin-bottom: 1rem;">{{ error }}</div>
+  {% endif %}
+
+  <section class="section" x-data="qrLogin()">
+    <p class="hint" x-show="!cameraSupported" style="display:none">
+      Camera access requires HTTPS or a localhost connection. Open this page over HTTPS to sign in.
+    </p>
+    <div id="qr-reader" style="width: 100%; max-width: 480px; margin: 0 auto;"></div>
+    <div class="qr-controls" style="text-align: center; margin-top: 0.5rem;">
+      <button class="btn btn-secondary" type="button" @click="startScan" x-show="!scanning && cameraSupported" style="display:none">Start camera</button>
+      <button class="btn btn-secondary" type="button" @click="stopScan" x-show="scanning" style="display:none">Stop camera</button>
+    </div>
+    <p class="qr-status" x-text="status" style="text-align: center; min-height: 1.5em;"></p>
+  </section>
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script>
+  function qrLogin() {
+    return {
+      scanning: false,
+      cameraSupported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+      status: '',
+      reader: null,
+      init() {
+        if (this.cameraSupported) {
+          this.$nextTick(() => this.startScan());
+        }
+      },
+      startScan() {
+        if (this.scanning) return;
+        this.status = 'Starting camera…';
+        this.reader = new Html5Qrcode('qr-reader');
+        this.reader.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 240, height: 240 } },
+          (decodedText) => {
+            this.status = 'QR detected. Verifying…';
+            this.scanning = false;
+            this.reader.stop().catch(() => {}).finally(() => this.submit(decodedText));
+          },
+          () => {}
+        ).then(() => { this.scanning = true; this.status = 'Point your camera at the QR code.'; })
+         .catch((err) => { this.status = 'Camera error: ' + err; this.scanning = false; });
+      },
+      stopScan() {
+        if (!this.scanning || !this.reader) return;
+        this.reader.stop().then(() => { this.scanning = false; this.status = 'Camera stopped.'; }).catch(() => {});
+      },
+      submit(qrText) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '/resident/login';
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = 'qr_data';
+        input.value = qrText;
+        form.appendChild(input);
+        document.body.appendChild(form);
+        form.submit();
+      },
+    };
+  }
+</script>
+{% endblock %}

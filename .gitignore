@@ -10,6 +10,11 @@ config.toml
 *.pem
 credentials-18.txt
 wireguard-config.txt
+team-18-uins.txt
+
+# Runtime artifacts
+*.log
+QR Codes/
 
 # Environment folders
 env/

@@ -24,9 +24,7 @@ RESIDENTS = [
 ]
 
 STATIONS = [
-    ("Station Alpha", "Brgy. Hall, Barangay Uno"),
-    ("Station Bravo", "Community Center, Barangay Dos"),
-    ("Station Charlie", "Health Center, Barangay Tres"),
+    ("Station Alpha", "UP AECH, Velasquez St., UP Diliman, Quezon City"),
 ]
 
 

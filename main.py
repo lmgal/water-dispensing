@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from database import create_tables
-from routers import admin, api_resident, api_station, pages, sse
+from routers import admin, api_resident, api_station, pages, resident, sse
 from routers.admin import _LoginRequired
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -28,6 +28,7 @@ app.state.templates = Jinja2Templates(directory=BASE_DIR / "templates")
 # Include routers
 app.include_router(pages.router)
 app.include_router(admin.router)
+app.include_router(resident.router)
 app.include_router(api_station.router)
 app.include_router(api_resident.router)
 app.include_router(sse.router)
