@@ -14,8 +14,9 @@
       <div class="inline-actions">
         <button type="submit" class="btn btn-sm btn-primary">Save</button>
         <button type="button" class="btn btn-sm btn-secondary"
-                hx-get="/admin/residents/search?q="
-                hx-target="#resident-tbody">Cancel</button>
+          hx-get="/admin/residents/{{ r.id }}/row"
+          hx-target="#resident-{{ r.id }}"
+          hx-swap="outerHTML">Cancel</button>
       </div>
     </form>
   </td>

@@ -127,6 +127,49 @@ def residents_search(request: Request, q: str = "", db: Session = Depends(get_db
     return _tpl(request, "partials/resident_table.html", {"residents": residents})
 
 
+# ← NEW: Register resident page (GET)
+@router.get("/residents/register", dependencies=[Depends(_guard)])
+def register_resident_page(request: Request):
+    return _tpl(request, "admin/register_resident.html", {})
+
+
+# ← NEW: Register resident submit (POST)
+@router.post("/residents/register", dependencies=[Depends(_guard)])
+async def register_resident_submit(
+    request: Request,
+    philsys_id: str = Form(...),
+    first_name: str = Form(...),
+    last_name: str = Form(...),
+    address: str = Form(""),
+    daily_limit_ml: int = Form(20_000),
+    db: Session = Depends(get_db),
+):
+    existing = db.query(Resident).filter(Resident.philsys_id == philsys_id).first()
+    if existing:
+        return _tpl(request, "admin/register_resident.html", {
+            "error": "PhilSys ID already registered.",
+            # Preserve form values so admin doesn't have to re-scan
+            "philsys_id": philsys_id,
+            "first_name": first_name,
+            "last_name": last_name,
+            "address": address,
+            "daily_limit_ml": daily_limit_ml,
+        })
+
+    resident = Resident(
+        philsys_id=philsys_id,
+        first_name=first_name,
+        last_name=last_name,
+        address=address,
+        daily_limit_ml=daily_limit_ml,
+    )
+    db.add(resident)
+    db.commit()
+
+    # Redirect back to residents list after success
+    return RedirectResponse("/admin/residents", status_code=303)
+
+
 @router.post("/residents", dependencies=[Depends(_guard)])
 async def create_resident(
     request: Request,
@@ -164,6 +207,10 @@ def edit_resident_form(resident_id: int, request: Request, db: Session = Depends
     resident = db.query(Resident).filter(Resident.id == resident_id).first()
     return _tpl(request, "partials/resident_form.html", {"r": resident})
 
+@router.get("/residents/{resident_id}/row", dependencies=[Depends(_guard)])
+def resident_row(resident_id: int, request: Request, db: Session = Depends(get_db)):
+    resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    return _tpl(request, "partials/resident_row.html", {"r": resident})
 
 @router.put("/residents/{resident_id}", dependencies=[Depends(_guard)])
 async def update_resident(

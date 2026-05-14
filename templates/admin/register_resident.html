@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}Register Resident &mdash; AquaTrack{% endblock %}
+{% block nav_admin %}active{% endblock %}
+{% block content %}
+<div id="admin-content">
+<div class="admin-header">
+  <h1>Register New Resident</h1>
+  <nav class="admin-nav">
+    <a href="/admin" class="admin-tab">Overview</a>
+    <a href="/admin/residents" class="admin-tab active">Residents</a>
+    <a href="/admin/dispensing" class="admin-tab">Dispensing Log</a>
+    <a href="/admin/stations" class="admin-tab">Stations</a>
+    <a href="/admin/logout" class="admin-tab admin-logout">Logout</a>
+  </nav>
+</div>
+
+<div class="section" x-data="{
+  scanning: false,
+  scanStatus: '',
+  reader: null,
+
+  startScan() {
+    this.scanStatus = 'Starting camera…';
+    const readerEl = document.getElementById('qr-register-reader');
+    readerEl.innerHTML = '';
+    this.reader = new Html5Qrcode('qr-register-reader');
+    this.reader.start(
+      { facingMode: 'environment' },
+      { fps: 10, qrbox: { width: 240, height: 240 } },
+      (decodedText) => {
+        this.scanStatus = 'QR detected! Filling form…';
+        this.stopScan();
+        this.fillForm(decodedText);
+      },
+      () => {}
+    ).then(() => {
+      this.scanning = true;
+      this.scanStatus = 'Point camera at PhilSys QR code.';
+    }).catch((err) => {
+      this.scanStatus = 'Camera error: ' + err;
+      this.scanning = false;
+    });
+  },
+
+  stopScan() {
+    if (this.reader) {
+      this.reader.stop().catch(() => {});
+      this.reader = null;
+    }
+    this.scanning = false;
+    const readerEl = document.getElementById('qr-register-reader');
+    if (readerEl) readerEl.innerHTML = '';
+  },
+
+  fillForm(qrText) {
+    try {
+      const data = JSON.parse(qrText);
+
+      // Fill PhilSys ID
+      const philsysField = document.querySelector('[name=philsys_id]');
+      if (philsysField) philsysField.value = data.uin || data.individualId || data.id || '';
+
+      // Fill name
+      if (data.name) {
+        const parts = data.name.trim().split(/\s+/);
+        const firstField = document.querySelector('[name=first_name]');
+        const lastField = document.querySelector('[name=last_name]');
+        if (firstField) firstField.value = parts.slice(0, -1).join(' ') || '';
+        if (lastField) lastField.value = parts[parts.length - 1] || '';
+      } else {
+        const firstField = document.querySelector('[name=first_name]');
+        const lastField = document.querySelector('[name=last_name]');
+        if (firstField) firstField.value = data.firstName || '';
+        if (lastField) lastField.value = data.lastName || '';
+      }
+
+      // Fill address
+      const addressField = document.querySelector('[name=address]');
+      if (addressField) {
+        const addressParts = [
+          data.address_line1,
+          data.address_line2,
+          data.address_line3,
+          data.zone,
+          data.location1,
+        ].filter(Boolean);
+        addressField.value = addressParts.join(', ') || data.address || '';
+      }
+
+      this.scanStatus = 'Form filled! Review and click Register.';
+    } catch (e) {
+      this.scanStatus = 'Invalid QR format. Please try again.';
+    }
+  }
+}">
+
+  <!-- QR Scanner -->
+  <div style="max-width: 480px; margin: 0 auto 2rem auto;">
+    <h3 style="margin-bottom: 0.75rem;">Scan PhilSys QR Code</h3>
+
+    <!-- Camera view — always rendered -->
+    <div id="qr-register-reader"
+         style="width: 100%; min-height: 300px; background: #f0f0f0; border-radius: 8px; overflow: hidden;">
+    </div>
+
+    <div style="text-align: center; margin-top: 0.75rem;">
+      <button type="button"
+              class="btn btn-secondary"
+              @click="startScan()"
+              x-show="!scanning"
+              style="width: 100%;">
+        Start Camera
+      </button>
+      <button type="button"
+              class="btn btn-secondary"
+              @click="stopScan()"
+              x-show="scanning"
+              style="width: 100%;">
+        Stop Camera
+      </button>
+    </div>
+
+    <p x-text="scanStatus"
+       style="text-align: center; font-size: 0.85rem; margin-top: 0.5rem; min-height: 1.2em; color: #666;">
+    </p>
+  </div>
+
+  <hr style="margin-bottom: 2rem;">
+
+  <!-- Registration Form -->
+  <div style="max-width: 480px; margin: 0 auto;">
+    <h3 style="margin-bottom: 0.75rem;">Resident Details</h3>
+    {% if error %}
+        <div style="
+        background: #fee2e2;
+        border: 1px solid #f87171;
+        color: #b91c1c;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        margin-bottom: 1rem;
+        font-size: 0.9rem;">
+        ⚠️ {{ error }}
+        </div>
+    {% endif %}
+    <form action="/admin/residents/register" method="post" class="form-stack">
+      <div class="form-group">
+        <label>PhilSys ID</label>
+        <input type="text" name="philsys_id" required class="input" placeholder="PSN-2024-00001">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>First Name</label>
+          <input type="text" name="first_name" required class="input">
+        </div>
+        <div class="form-group">
+          <label>Last Name</label>
+          <input type="text" name="last_name" required class="input">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Address</label>
+        <input type="text" name="address" class="input">
+      </div>
+      <div class="form-group">
+        <label>Daily Limit (mL)</label>
+        <input type="number" name="daily_limit_ml" value="20000" class="input">
+      </div>
+      <div class="form-actions">
+        <a href="/admin/residents" class="btn btn-secondary">Cancel</a>
+        <button type="submit" class="btn btn-primary">Register</button>
+      </div>
+    </form>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+{% endblock %}
