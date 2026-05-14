@@ -1,7 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Resident Management &mdash; AquaTrack{% endblock %}
 {% block nav_admin %}active{% endblock %}
-
 {% block content %}
 <div id="admin-content">
 <div class="admin-header">
@@ -15,7 +14,7 @@
   </nav>
 </div>
 
-<div class="toolbar" x-data="{ showModal: false }">
+<div class="toolbar">
   <div class="search-box">
     <input type="text"
            name="q"
@@ -25,46 +24,8 @@
            hx-trigger="input changed delay:300ms, search"
            hx-target="#resident-tbody">
   </div>
-  <button class="btn btn-primary" @click="showModal = true">+ Register Resident</button>
-
-  <!-- Register Modal -->
-  <div class="modal-backdrop" x-show="showModal" x-transition.opacity @click.self="showModal = false" style="display: none;">
-    <div class="modal" @click.stop>
-      <h3>Register New Resident</h3>
-      <form hx-post="/admin/residents"
-            hx-target="#resident-tbody"
-            hx-swap="afterbegin"
-            @htmx:after-request="showModal = false"
-            class="form-stack">
-        <div class="form-group">
-          <label>PhilSys ID</label>
-          <input type="text" name="philsys_id" required class="input" placeholder="PSN-2024-00001">
-        </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label>First Name</label>
-            <input type="text" name="first_name" required class="input">
-          </div>
-          <div class="form-group">
-            <label>Last Name</label>
-            <input type="text" name="last_name" required class="input">
-          </div>
-        </div>
-        <div class="form-group">
-          <label>Address</label>
-          <input type="text" name="address" class="input">
-        </div>
-        <div class="form-group">
-          <label>Daily Limit (mL)</label>
-          <input type="number" name="daily_limit_ml" value="20000" class="input">
-        </div>
-        <div class="form-actions">
-          <button type="button" class="btn btn-secondary" @click="showModal = false">Cancel</button>
-          <button type="submit" class="btn btn-primary">Register</button>
-        </div>
-      </form>
-    </div>
-  </div>
+  <!-- Simple link to new registration page instead of modal -->
+  <a href="/admin/residents/register" class="btn btn-primary">+ Register Resident</a>
 </div>
 
 <div class="table-wrap">
@@ -89,5 +50,6 @@
 {% if not residents %}
 <p class="empty-state">No residents registered yet. Click "Register Resident" to add one.</p>
 {% endif %}
+
 </div>
 {% endblock %}

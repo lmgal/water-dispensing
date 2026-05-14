@@ -11,6 +11,7 @@ config.toml
 credentials-18.txt
 wireguard-config.txt
 team-18-uins.txt
+users.txt
 
 # Runtime artifacts
 *.log
