@@ -1,14 +1,14 @@
 import logging
-from datetime import datetime, date
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database import get_db
 from events import event_manager
 from models import DispensingRecord, Resident, Station
 from mosip import verify_qr
+from quota import effective_used
 from schemas import AuthRequest, AuthResponse, DispenseRequest, DispenseResponse, HeartbeatRequest
 
 logger = logging.getLogger("api_station")
@@ -31,14 +31,6 @@ def require_station_key(
     return station
 
 
-def _get_month_usage(db: Session, resident_id: int) -> float:
-    today = date.today()
-    month_start = datetime(today.year, today.month, 1)
-    result = db.query(func.coalesce(func.sum(DispensingRecord.volume_ml), 0)).filter(
-        DispensingRecord.resident_id == resident_id,
-        DispensingRecord.started_at >= month_start,
-    ).scalar()
-    return float(result)
 
 
 @router.post("/auth", response_model=AuthResponse)
@@ -72,7 +64,7 @@ async def auth_scan(req: AuthRequest, station: Station = Depends(require_station
         return AuthResponse(authorized=False, reason="Resident account is deactivated.")
 
     # Check monthly limit
-    used_month = _get_month_usage(db, resident.id)
+    used_month = effective_used(db, resident)
     remaining = max(0, resident.monthly_limit_ml - used_month)
     if remaining <= 0:
         logger.warning(
@@ -117,7 +109,7 @@ async def record_dispense(req: DispenseRequest, station: Station = Depends(requi
     db.commit()
 
     # Calculate remaining
-    used_month = _get_month_usage(db, req.resident_id)
+    used_month = effective_used(db, resident)
     remaining = max(0, resident.monthly_limit_ml - used_month)
 
     # Publish events for SSE

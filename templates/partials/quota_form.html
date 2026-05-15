@@ -1,0 +1,26 @@
+<tr id="resident-{{ r.id }}" class="editing-row">
+  <td><code>{{ r.philsys_id }}</code></td>
+  <td colspan="5">
+    <form hx-post="/admin/residents/{{ r.id }}/quota"
+          hx-target="#resident-{{ r.id }}"
+          hx-swap="outerHTML"
+          class="inline-form">
+      <div class="inline-fields">
+        <label style="font-size: 0.85rem; color: #666;">
+          Set remaining (mL) — max {{ r.monthly_limit_ml }}
+        </label>
+        <input type="number" name="remaining_ml"
+               value="{{ (r.effective_remaining_ml or 0) | round | int }}"
+               min="0" max="{{ r.monthly_limit_ml }}"
+               class="input input-sm input-narrow" required>
+      </div>
+      <div class="inline-actions">
+        <button type="submit" class="btn btn-sm btn-primary">Apply</button>
+        <button type="button" class="btn btn-sm btn-secondary"
+          hx-get="/admin/residents/{{ r.id }}/row"
+          hx-target="#resident-{{ r.id }}"
+          hx-swap="outerHTML">Cancel</button>
+      </div>
+    </form>
+  </td>
+</tr>

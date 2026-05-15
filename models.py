@@ -18,6 +18,8 @@ class Resident(Base):
     address = Column(Text, default="")
     is_active = Column(Boolean, default=True)
     monthly_limit_ml = Column(Integer, default=20_000)
+    quota_offset_ml = Column(Integer, default=0)
+    quota_offset_month = Column(String(7), default="")
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

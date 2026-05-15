@@ -1,16 +1,16 @@
 import hashlib
 import hmac
-from datetime import date, datetime
+from datetime import date
 
 from fastapi import APIRouter, Cookie, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from config import SECRET_KEY
 from database import get_db
 from models import DispensingRecord, Resident
 from mosip import verify_qr
+from quota import effective_used, month_start
 
 router = APIRouter(prefix="/resident", tags=["resident"])
 
@@ -37,10 +37,6 @@ def _get_session_resident(
     if not resident or not resident.is_active:
         return None
     return resident
-
-
-def _month_start(today: date) -> datetime:
-    return datetime(today.year, today.month, 1)
 
 
 @router.get("/login")
@@ -104,18 +100,11 @@ def portal(
         return RedirectResponse("/resident/login", status_code=303)
 
     today = date.today()
-    month_start = _month_start(today)
+    start = month_start(today)
     month_label = today.strftime("%B %Y")
 
     monthly_quota_ml = resident.monthly_limit_ml
-    month_used_ml = float(
-        db.query(func.coalesce(func.sum(DispensingRecord.volume_ml), 0))
-        .filter(
-            DispensingRecord.resident_id == resident.id,
-            DispensingRecord.started_at >= month_start,
-        )
-        .scalar()
-    )
+    month_used_ml = effective_used(db, resident)
     month_remaining_ml = max(0.0, monthly_quota_ml - month_used_ml)
     pct_used = min(100.0, (month_used_ml / monthly_quota_ml * 100) if monthly_quota_ml else 0.0)
 
@@ -123,7 +112,7 @@ def portal(
         db.query(DispensingRecord)
         .filter(
             DispensingRecord.resident_id == resident.id,
-            DispensingRecord.started_at >= month_start,
+            DispensingRecord.started_at >= start,
         )
         .order_by(DispensingRecord.started_at.desc())
         .all()

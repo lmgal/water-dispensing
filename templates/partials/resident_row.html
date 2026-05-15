@@ -14,11 +14,21 @@
   <td>{{ r.full_name }}</td>
   <td>{{ r.address or "—" }}</td>
   <td>{{ "%.0f"|format(r.monthly_limit_ml / 1000) }}L</td>
+  <td>{{ "%.1f"|format((r.effective_remaining_ml or 0) / 1000) }}L</td>
   <td class="actions">
     <button class="btn btn-sm btn-secondary"
             hx-get="/admin/residents/{{ r.id }}/edit"
             hx-target="#resident-{{ r.id }}"
             hx-swap="outerHTML">Edit</button>
+    <button class="btn btn-sm btn-secondary"
+            hx-get="/admin/residents/{{ r.id }}/quota/edit"
+            hx-target="#resident-{{ r.id }}"
+            hx-swap="outerHTML">Adjust</button>
+    <button class="btn btn-sm btn-secondary"
+            hx-post="/admin/residents/{{ r.id }}/quota/reset"
+            hx-target="#resident-{{ r.id }}"
+            hx-swap="outerHTML"
+            hx-confirm="Reset {{ r.full_name }}'s monthly usage to 0? Full allowance will be restored.">Reset</button>
     <button class="btn btn-sm btn-danger"
             hx-delete="/admin/residents/{{ r.id }}"
             hx-target="#resident-{{ r.id }}"

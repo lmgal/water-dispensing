@@ -11,6 +11,12 @@ from config import ADMIN_USERNAME, ADMIN_PASSWORD, SECRET_KEY, STATION_OFFLINE_T
 from database import get_db
 from events import event_manager
 from models import DispensingRecord, Resident, Station
+from quota import (
+    attach_remaining,
+    current_month_str,
+    effective_remaining,
+    month_raw_used,
+)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -110,6 +116,7 @@ def dashboard(request: Request, db: Session = Depends(get_db)):
 @router.get("/residents", dependencies=[Depends(_guard)])
 def residents_page(request: Request, db: Session = Depends(get_db)):
     residents = db.query(Resident).order_by(Resident.last_name).all()
+    attach_remaining(db, residents)
     return _tpl(request, "admin/residents.html", {"residents": residents})
 
 
@@ -124,6 +131,7 @@ def residents_search(request: Request, q: str = "", db: Session = Depends(get_db
             | (Resident.philsys_id.ilike(search))
         )
     residents = query.order_by(Resident.last_name).all()
+    attach_remaining(db, residents)
     return _tpl(request, "partials/resident_table.html", {"residents": residents})
 
 
@@ -178,6 +186,7 @@ def edit_resident_form(resident_id: int, request: Request, db: Session = Depends
 @router.get("/residents/{resident_id}/row", dependencies=[Depends(_guard)])
 def resident_row(resident_id: int, request: Request, db: Session = Depends(get_db)):
     resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    attach_remaining(db, [resident])
     return _tpl(request, "partials/resident_row.html", {"r": resident})
 
 @router.put("/residents/{resident_id}", dependencies=[Depends(_guard)])
@@ -201,7 +210,57 @@ async def update_resident(
     resident.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(resident)
+    attach_remaining(db, [resident])
 
+    return _tpl(request, "partials/resident_row.html", {"r": resident})
+
+
+@router.get("/residents/{resident_id}/quota/edit", dependencies=[Depends(_guard)])
+def quota_edit_form(resident_id: int, request: Request, db: Session = Depends(get_db)):
+    resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    if not resident:
+        return HTMLResponse("Not found", status_code=404)
+    attach_remaining(db, [resident])
+    return _tpl(request, "partials/quota_form.html", {"r": resident})
+
+
+@router.post("/residents/{resident_id}/quota", dependencies=[Depends(_guard)])
+async def set_quota_remaining(
+    resident_id: int,
+    request: Request,
+    remaining_ml: int = Form(...),
+    db: Session = Depends(get_db),
+):
+    resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    if not resident:
+        return HTMLResponse("Not found", status_code=404)
+    remaining_ml = max(0, min(remaining_ml, resident.monthly_limit_ml))
+    raw = month_raw_used(db, resident.id)
+    resident.quota_offset_ml = int(resident.monthly_limit_ml - remaining_ml - raw)
+    resident.quota_offset_month = current_month_str()
+    resident.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(resident)
+    attach_remaining(db, [resident])
+    return _tpl(request, "partials/resident_row.html", {"r": resident})
+
+
+@router.post("/residents/{resident_id}/quota/reset", dependencies=[Depends(_guard)])
+async def reset_quota(
+    resident_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    resident = db.query(Resident).filter(Resident.id == resident_id).first()
+    if not resident:
+        return HTMLResponse("Not found", status_code=404)
+    raw = month_raw_used(db, resident.id)
+    resident.quota_offset_ml = -int(raw)
+    resident.quota_offset_month = current_month_str()
+    resident.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(resident)
+    attach_remaining(db, [resident])
     return _tpl(request, "partials/resident_row.html", {"r": resident})
 
 

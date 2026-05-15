@@ -1,6 +1,6 @@
 <tr id="resident-{{ r.id }}" class="editing-row">
   <td><code>{{ r.philsys_id }}</code></td>
-  <td colspan="4">
+  <td colspan="5">
     <form hx-put="/admin/residents/{{ r.id }}"
           hx-target="#resident-{{ r.id }}"
           hx-swap="outerHTML"

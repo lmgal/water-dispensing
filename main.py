@@ -13,20 +13,29 @@ from routers.admin import _LoginRequired
 BASE_DIR = Path(__file__).resolve().parent
 
 
-def _migrate_daily_to_monthly() -> None:
+def _migrate_residents_schema() -> None:
     with engine.connect() as conn:
         cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(residents)").fetchall()}
         if "daily_limit_ml" in cols and "monthly_limit_ml" not in cols:
             conn.exec_driver_sql(
                 "ALTER TABLE residents RENAME COLUMN daily_limit_ml TO monthly_limit_ml"
             )
-            conn.commit()
+            cols.add("monthly_limit_ml")
+        if "quota_offset_ml" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE residents ADD COLUMN quota_offset_ml INTEGER DEFAULT 0"
+            )
+        if "quota_offset_month" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE residents ADD COLUMN quota_offset_month VARCHAR(7) DEFAULT ''"
+            )
+        conn.commit()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    _migrate_daily_to_monthly()
     create_tables()
+    _migrate_residents_schema()
     yield
 
 
