@@ -37,7 +37,7 @@ def require_station_key(
 async def auth_scan(req: AuthRequest, station: Station = Depends(require_station_key), db: Session = Depends(get_db)):
     """QR scan verification — called by ESP8266 after scanning PhilSys ID."""
     # Verify QR via simulated MOSIP
-    mosip_result = await verify_qr(req.qr_data, check_demographics=False)
+    mosip_result = await verify_qr(req.qr_data)
     if not mosip_result.verified:
         logger.warning(
             "auth_denied station=%s reason=mosip_unverified uin=%s msg=%r",

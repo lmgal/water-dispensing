@@ -52,27 +52,19 @@ class MOSIPVerificationResult(BaseModel):
 def parse_philsys_qr(raw: str) -> Optional[dict]:
     try:
         data = json.loads(raw)
-        if "uin" in data:
-            name_parts = data.get("name", "").split(None, 1)
-            return {
-                "individual_id": data["uin"],
-                "first_name": name_parts[0] if name_parts else "",
-                "last_name": name_parts[1] if len(name_parts) > 1 else "",
-                "dob": data.get("dob", ""),
-                "name": data.get("name", ""),
-            }
-        if "individualId" in data:
-            name_parts = data.get("name", "").split(None, 1)
-            return {
-                "individual_id": data["individualId"],
-                "first_name": name_parts[0] if name_parts else "",
-                "last_name": name_parts[1] if len(name_parts) > 1 else "",
-                "dob": data.get("dob", ""),
-                "name": data.get("name", ""),
-            }
+        uin = data.get("uin") or data.get("individualId")
+        if not uin:
+            return None
+        name_parts = data.get("name", "").split(None, 1)
+        result = dict(data)
+        result["individual_id"] = uin
+        result["first_name"] = name_parts[0] if name_parts else ""
+        result["last_name"] = name_parts[1] if len(name_parts) > 1 else ""
+        result["dob"] = data.get("dob", "")
+        result["name"] = data.get("name", "")
+        return result
     except (json.JSONDecodeError, TypeError, KeyError):
-        pass
-    return None
+        return None
 
 def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
     auth = _get_authenticator()
@@ -117,14 +109,19 @@ def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
         message="✅ Verified via DOB" if auth_status else "❌ Verification failed.",
     )
 
-def _do_mock_auth(parsed: dict, check_demographics: bool = True) -> MOSIPVerificationResult:
+_MOCK_DEMOGRAPHIC_FIELDS = (
+    "name", "gender", "dob", "age", "phone_number", "email_id",
+    "postal_code", "location1", "location3", "zone",
+    "address_line1", "address_line2", "address_line3",
+)
+
+
+def _do_mock_auth(parsed: dict) -> MOSIPVerificationResult:
     url = os.environ["MOSIP_MOCK_URL"].rstrip("/") + "/api/v1/auth/yes-no"
-    payload = {
-        "individual_id": parsed["individual_id"],
-        "consent": True,
-    }
-    if check_demographics and parsed.get("dob"):
-        payload["dob"] = parsed["dob"]
+    payload = {"individual_id": parsed["individual_id"], "consent": True}
+    for key in _MOCK_DEMOGRAPHIC_FIELDS:
+        if parsed.get(key):
+            payload[key] = parsed[key]
     resp = requests.post(
         url,
         json=payload,
@@ -143,7 +140,7 @@ def _do_mock_auth(parsed: dict, check_demographics: bool = True) -> MOSIPVerific
     )
 
 
-async def verify_qr(qr_data: str, check_demographics: bool = True) -> MOSIPVerificationResult:
+async def verify_qr(qr_data: str) -> MOSIPVerificationResult:
     parsed = parse_philsys_qr(qr_data)
     if parsed is None:
         return MOSIPVerificationResult(
@@ -153,7 +150,7 @@ async def verify_qr(qr_data: str, check_demographics: bool = True) -> MOSIPVerif
     if os.environ.get("MOSIP_MOCK_URL"):
         try:
             loop = asyncio.get_event_loop()
-            return await loop.run_in_executor(None, lambda: _do_mock_auth(parsed, check_demographics))
+            return await loop.run_in_executor(None, lambda: _do_mock_auth(parsed))
         except Exception as e:
             return MOSIPVerificationResult(
                 verified=False,
