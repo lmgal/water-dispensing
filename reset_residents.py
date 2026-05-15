@@ -14,10 +14,10 @@ from models import DispensingRecord, Resident
 
 
 RESIDENTS = [
-    ("2170938143", "Anton",   "Gosiengfiao",       "UP AECH, Velasquez St., UP Diliman, Quezon City"),
-    ("4360458298", "Emmerson", "Isip",             "UP AECH, Velasquez St., UP Diliman, Quezon City"),
-    ("7352816436", "Jakin",    "Mishle Bacalla",   "UP AECH, Velasquez St., UP Diliman, Quezon City"),
-    ("4619436753", "Kharis",   "Arielle Ann Hipe", "UP AECH, Velasquez St., UP Diliman, Quezon City"),
+    ("2170938143", "Anton",    "Gosiengfiao",       "UP AECH, Velasquez St., UP Diliman, Quezon City", 20_000),
+    ("4360458298", "Emmerson", "Isip",              "UP AECH, Velasquez St., UP Diliman, Quezon City", 20_000),
+    ("7352816436", "Jakin",    "Mishle Bacalla",    "UP AECH, Velasquez St., UP Diliman, Quezon City", 100),
+    ("4619436753", "Kharis",   "Arielle Ann Hipe",  "UP AECH, Velasquez St., UP Diliman, Quezon City", 20_000),
 ]
 
 
@@ -28,13 +28,13 @@ def reset():
         deleted_records = db.query(DispensingRecord).delete()
         deleted_residents = db.query(Resident).delete()
         db.flush()
-        for uin, first, last, addr in RESIDENTS:
+        for uin, first, last, addr, limit in RESIDENTS:
             db.add(Resident(
                 philsys_id=uin,
                 first_name=first,
                 last_name=last,
                 address=addr,
-                daily_limit_ml=20_000,
+                monthly_limit_ml=limit,
             ))
         db.commit()
         print(f"Removed {deleted_residents} residents and {deleted_records} records.")

@@ -26,10 +26,6 @@
         <span class="stat-value">{{ "%.0f"|format(monthly_quota_ml / 1000) }}L</span>
         <span class="stat-label">Monthly allocation</span>
       </div>
-      <div class="stat-card accent-purple">
-        <span class="stat-value">{{ "%.1f"|format(today_remaining_ml / 1000) }}L</span>
-        <span class="stat-label">Remaining today</span>
-      </div>
     </div>
     <div class="water-level" style="margin-top: 1rem;">
       <div class="water-level-bar {% if pct_used < 70 %}level-good{% elif pct_used < 90 %}level-low{% else %}level-critical{% endif %}" style="width: {{ '%.1f'|format(pct_used) }}%"></div>

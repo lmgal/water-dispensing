@@ -141,7 +141,7 @@ async def register_resident_submit(
     first_name: str = Form(...),
     last_name: str = Form(...),
     address: str = Form(""),
-    daily_limit_ml: int = Form(20_000),
+    monthly_limit_ml: int = Form(20_000),
     db: Session = Depends(get_db),
 ):
     existing = db.query(Resident).filter(Resident.philsys_id == philsys_id).first()
@@ -153,7 +153,7 @@ async def register_resident_submit(
             "first_name": first_name,
             "last_name": last_name,
             "address": address,
-            "daily_limit_ml": daily_limit_ml,
+            "monthly_limit_ml": monthly_limit_ml,
         })
 
     resident = Resident(
@@ -161,7 +161,7 @@ async def register_resident_submit(
         first_name=first_name,
         last_name=last_name,
         address=address,
-        daily_limit_ml=daily_limit_ml,
+        monthly_limit_ml=monthly_limit_ml,
     )
     db.add(resident)
     db.commit()
@@ -187,7 +187,7 @@ async def update_resident(
     first_name: str = Form(...),
     last_name: str = Form(...),
     address: str = Form(""),
-    daily_limit_ml: int = Form(20_000),
+    monthly_limit_ml: int = Form(20_000),
     db: Session = Depends(get_db),
 ):
     resident = db.query(Resident).filter(Resident.id == resident_id).first()
@@ -197,7 +197,7 @@ async def update_resident(
     resident.first_name = first_name
     resident.last_name = last_name
     resident.address = address
-    resident.daily_limit_ml = daily_limit_ml
+    resident.monthly_limit_ml = monthly_limit_ml
     resident.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(resident)

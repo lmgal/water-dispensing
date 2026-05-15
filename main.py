@@ -6,15 +6,26 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from database import create_tables
+from database import create_tables, engine
 from routers import admin, api_resident, api_station, pages, resident, sse
 from routers.admin import _LoginRequired
 
 BASE_DIR = Path(__file__).resolve().parent
 
 
+def _migrate_daily_to_monthly() -> None:
+    with engine.connect() as conn:
+        cols = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(residents)").fetchall()}
+        if "daily_limit_ml" in cols and "monthly_limit_ml" not in cols:
+            conn.exec_driver_sql(
+                "ALTER TABLE residents RENAME COLUMN daily_limit_ml TO monthly_limit_ml"
+            )
+            conn.commit()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    _migrate_daily_to_monthly()
     create_tables()
     yield
 

@@ -11,7 +11,7 @@ class ResidentCreate(BaseModel):
     first_name: str
     last_name: str
     address: str = ""
-    daily_limit_ml: int = 20_000
+    monthly_limit_ml: int = 20_000
 
 
 class ResidentUpdate(BaseModel):
@@ -19,7 +19,7 @@ class ResidentUpdate(BaseModel):
     last_name: Optional[str] = None
     address: Optional[str] = None
     is_active: Optional[bool] = None
-    daily_limit_ml: Optional[int] = None
+    monthly_limit_ml: Optional[int] = None
 
 
 class ResidentResponse(BaseModel):
@@ -29,7 +29,7 @@ class ResidentResponse(BaseModel):
     last_name: str
     address: str
     is_active: bool
-    daily_limit_ml: int
+    monthly_limit_ml: int
     created_at: datetime
     updated_at: datetime
 

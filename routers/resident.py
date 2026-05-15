@@ -1,4 +1,3 @@
-import calendar
 import hashlib
 import hmac
 from datetime import date, datetime
@@ -40,11 +39,8 @@ def _get_session_resident(
     return resident
 
 
-def _month_window(today: date) -> tuple[datetime, int]:
-    """Return (month_start_datetime, days_in_month) for the month containing today."""
-    start = datetime(today.year, today.month, 1)
-    days = calendar.monthrange(today.year, today.month)[1]
-    return start, days
+def _month_start(today: date) -> datetime:
+    return datetime(today.year, today.month, 1)
 
 
 @router.get("/login")
@@ -108,10 +104,10 @@ def portal(
         return RedirectResponse("/resident/login", status_code=303)
 
     today = date.today()
-    month_start, days_in_month = _month_window(today)
+    month_start = _month_start(today)
     month_label = today.strftime("%B %Y")
 
-    monthly_quota_ml = resident.daily_limit_ml * days_in_month
+    monthly_quota_ml = resident.monthly_limit_ml
     month_used_ml = float(
         db.query(func.coalesce(func.sum(DispensingRecord.volume_ml), 0))
         .filter(
@@ -120,16 +116,7 @@ def portal(
         )
         .scalar()
     )
-    today_used_ml = float(
-        db.query(func.coalesce(func.sum(DispensingRecord.volume_ml), 0))
-        .filter(
-            DispensingRecord.resident_id == resident.id,
-            func.date(DispensingRecord.started_at) == today,
-        )
-        .scalar()
-    )
     month_remaining_ml = max(0.0, monthly_quota_ml - month_used_ml)
-    today_remaining_ml = max(0.0, resident.daily_limit_ml - today_used_ml)
     pct_used = min(100.0, (month_used_ml / monthly_quota_ml * 100) if monthly_quota_ml else 0.0)
 
     records = (
@@ -148,8 +135,6 @@ def portal(
         "monthly_quota_ml": monthly_quota_ml,
         "month_used_ml": month_used_ml,
         "month_remaining_ml": month_remaining_ml,
-        "today_used_ml": today_used_ml,
-        "today_remaining_ml": today_remaining_ml,
         "pct_used": pct_used,
         "records": records,
     })

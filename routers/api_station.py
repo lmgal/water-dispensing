@@ -31,11 +31,12 @@ def require_station_key(
     return station
 
 
-def _get_today_usage(db: Session, resident_id: int) -> float:
+def _get_month_usage(db: Session, resident_id: int) -> float:
     today = date.today()
+    month_start = datetime(today.year, today.month, 1)
     result = db.query(func.coalesce(func.sum(DispensingRecord.volume_ml), 0)).filter(
         DispensingRecord.resident_id == resident_id,
-        func.date(DispensingRecord.started_at) == today,
+        DispensingRecord.started_at >= month_start,
     ).scalar()
     return float(result)
 
@@ -70,15 +71,15 @@ async def auth_scan(req: AuthRequest, station: Station = Depends(require_station
         )
         return AuthResponse(authorized=False, reason="Resident account is deactivated.")
 
-    # Check daily limit
-    used_today = _get_today_usage(db, resident.id)
-    remaining = max(0, resident.daily_limit_ml - used_today)
+    # Check monthly limit
+    used_month = _get_month_usage(db, resident.id)
+    remaining = max(0, resident.monthly_limit_ml - used_month)
     if remaining <= 0:
         logger.warning(
             "auth_denied station=%s reason=quota_exhausted resident=%s used=%.0f limit=%.0f",
-            station.id, resident.id, used_today, resident.daily_limit_ml,
+            station.id, resident.id, used_month, resident.monthly_limit_ml,
         )
-        return AuthResponse(authorized=False, reason="Daily water allocation exhausted.")
+        return AuthResponse(authorized=False, reason="Monthly water allocation exhausted.")
 
     logger.info(
         "auth_ok station=%s resident=%s remaining_ml=%.0f",
@@ -116,8 +117,8 @@ async def record_dispense(req: DispenseRequest, station: Station = Depends(requi
     db.commit()
 
     # Calculate remaining
-    used_today = _get_today_usage(db, req.resident_id)
-    remaining = max(0, resident.daily_limit_ml - used_today)
+    used_month = _get_month_usage(db, req.resident_id)
+    remaining = max(0, resident.monthly_limit_ml - used_month)
 
     # Publish events for SSE
     await event_manager.publish("dispense", f"complete:{req.resident_id}:{req.station_id}:{req.volume_ml}")

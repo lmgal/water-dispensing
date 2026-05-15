@@ -45,7 +45,7 @@ def seed():
                 first_name=first,
                 last_name=last,
                 address=addr,
-                daily_limit_ml=20_000,
+                monthly_limit_ml=20_000,
             )
             db.add(r)
             residents.append(r)

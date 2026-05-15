@@ -17,7 +17,7 @@ class Resident(Base):
     last_name = Column(String(100), nullable=False)
     address = Column(Text, default="")
     is_active = Column(Boolean, default=True)
-    daily_limit_ml = Column(Integer, default=20_000)
+    monthly_limit_ml = Column(Integer, default=20_000)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
