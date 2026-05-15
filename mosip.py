@@ -5,9 +5,13 @@ from pathlib import Path
 from typing import Optional
 from pydantic import BaseModel
 
+import requests
+import urllib3
 from dynaconf import Dynaconf
 from mosip_auth_sdk import MOSIPAuthenticator
 from mosip_auth_sdk.models import DemographicsModel
+
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 _CONFIG_PATH = Path(__file__).resolve().parent / ".mosip_keys" / "config.toml"
 _authenticator: Optional[MOSIPAuthenticator] = None
@@ -113,13 +117,48 @@ def _do_mosip_auth(parsed: dict) -> MOSIPVerificationResult:
         message="✅ Verified via DOB" if auth_status else "❌ Verification failed.",
     )
 
-async def verify_qr(qr_data: str) -> MOSIPVerificationResult:
+def _do_mock_auth(parsed: dict, check_demographics: bool = True) -> MOSIPVerificationResult:
+    url = os.environ["MOSIP_MOCK_URL"].rstrip("/") + "/api/v1/auth/yes-no"
+    payload = {
+        "individual_id": parsed["individual_id"],
+        "consent": True,
+    }
+    if check_demographics and parsed.get("dob"):
+        payload["dob"] = parsed["dob"]
+    resp = requests.post(
+        url,
+        json=payload,
+        verify=False,
+        timeout=15,
+    )
+    body = resp.json()
+    auth_status = bool(body.get("response", {}).get("authStatus"))
+    return MOSIPVerificationResult(
+        verified=auth_status,
+        individual_id=parsed["individual_id"],
+        first_name=parsed["first_name"],
+        last_name=parsed["last_name"],
+        transaction_id=body.get("transactionID", ""),
+        message="✅ Verified via mock MOSIP" if auth_status else "❌ Verification failed.",
+    )
+
+
+async def verify_qr(qr_data: str, check_demographics: bool = True) -> MOSIPVerificationResult:
     parsed = parse_philsys_qr(qr_data)
     if parsed is None:
         return MOSIPVerificationResult(
             verified=False,
             message="Invalid QR code format.",
         )
+    if os.environ.get("MOSIP_MOCK_URL"):
+        try:
+            loop = asyncio.get_event_loop()
+            return await loop.run_in_executor(None, lambda: _do_mock_auth(parsed, check_demographics))
+        except Exception as e:
+            return MOSIPVerificationResult(
+                verified=False,
+                message=f"MOSIP mock error: {str(e)}",
+            )
     if os.environ.get("MOSIP_SKIP_VERIFICATION") == "1":
         return MOSIPVerificationResult(
             verified=True,
