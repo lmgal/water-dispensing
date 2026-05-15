@@ -13,8 +13,8 @@
   </td>
   <td>{{ r.full_name }}</td>
   <td>{{ r.address or "—" }}</td>
-  <td>{{ "%.0f"|format(r.monthly_limit_ml / 1000) }}L</td>
-  <td>{{ "%.1f"|format((r.effective_remaining_ml or 0) / 1000) }}L</td>
+  <td>{{ "%.2f"|format(r.monthly_limit_ml / 1000) }}L</td>
+  <td>{{ "%.2f"|format((r.effective_remaining_ml or 0) / 1000) }}L</td>
   <td class="actions">
     <button class="btn btn-sm btn-secondary"
             hx-get="/admin/residents/{{ r.id }}/edit"
